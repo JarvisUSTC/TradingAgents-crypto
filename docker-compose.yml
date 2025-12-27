@@ -1,0 +1,20 @@
+services:
+  trading-agent:
+    build: .
+    container_name: trading-agent
+    volumes:
+      - .:/app
+    environment:
+      # 关键：直接通过容器名访问
+      - HUMMINGBOT_API_URL=http://hummingbot-api:8000
+      - MQTT_HOST=hummingbot-broker
+    networks:
+      # 声明加入外部已存在的网络
+      - hummingbot_net
+
+networks:
+  # 这里的 hummingbot_net 是自定义逻辑名
+  # external: true 表示这个网络是已经存在的，不需要创建
+  hummingbot_net:
+    external: true
+    name: hummingbot-api_emqx-bridge
