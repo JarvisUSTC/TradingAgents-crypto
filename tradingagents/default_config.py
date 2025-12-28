@@ -46,4 +46,15 @@ DEFAULT_CONFIG = {
     "factor": {
         "look_back_days": int(os.getenv("TRADINGAGENTS_FACTOR_LOOKBACK_DAYS", "180")),
     },
+
+    # ===== Research backtest defaults =====
+    # Research-only, deterministic backtest node (no live trading).
+    "backtest": {
+        "enabled": os.getenv("TRADINGAGENTS_BACKTEST_ENABLED", "1").lower() in ("1", "true", "yes", "y"),
+        "look_back_days": int(os.getenv("TRADINGAGENTS_BACKTEST_LOOKBACK_DAYS", "365")),
+        "strategy": os.getenv("TRADINGAGENTS_BACKTEST_STRATEGY", "momentum"),
+        "momentum_lookback": int(os.getenv("TRADINGAGENTS_BACKTEST_MOM_LB", "20")),
+        "fee_bps": float(os.getenv("TRADINGAGENTS_BACKTEST_FEE_BPS", "0")),
+        "long_only": os.getenv("TRADINGAGENTS_BACKTEST_LONG_ONLY", "1").lower() in ("1", "true", "yes", "y"),
+    },
 }

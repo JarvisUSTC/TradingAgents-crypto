@@ -89,6 +89,7 @@ class GraphSetup:
             tool_nodes["fundamentals"] = self.tool_nodes["fundamentals"]
 
         # Create researcher and manager nodes
+        backtest_node = create_research_backtest(self.toolkit)
         bull_researcher_node = create_bull_researcher(
             self.quick_thinking_llm, self.bull_memory
         )
@@ -120,6 +121,7 @@ class GraphSetup:
             workflow.add_node(f"tools_{analyst_type}", tool_nodes[analyst_type])
 
         # Add other nodes
+        workflow.add_node("Research Backtest", backtest_node)
         workflow.add_node("Bull Researcher", bull_researcher_node)
         workflow.add_node("Bear Researcher", bear_researcher_node)
         workflow.add_node("Research Manager", research_manager_node)
@@ -153,7 +155,15 @@ class GraphSetup:
                 next_analyst = f"{selected_analysts[i+1].capitalize()} Analyst"
                 workflow.add_edge(current_clear, next_analyst)
             else:
-                workflow.add_edge(current_clear, "Bull Researcher")
+                # Insert deterministic research backtest before debate to provide quantitative evidence
+                # (optional, research-only)
+                if self.toolkit.config.get("backtest", {}).get("enabled", True):
+                    workflow.add_edge(current_clear, "Research Backtest")
+                else:
+                    workflow.add_edge(current_clear, "Bull Researcher")
+
+        if self.toolkit.config.get("backtest", {}).get("enabled", True):
+            workflow.add_edge("Research Backtest", "Bull Researcher")
 
         # Add remaining edges
         workflow.add_conditional_edges(

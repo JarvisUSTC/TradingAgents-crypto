@@ -1092,7 +1092,7 @@ def get_crypto_factor_report(
         fallback = get_crypto_technical_indicators(symbol, curr_date, look_back_days)
         return (
             f"## {symbol.upper()} Factor Report (fallback: CoinGecko price-only)\n\n"
-            "无法获取结构化 OHLCV（用于因子计算）。以下返回价格层面的技术摘要作为替代：\n\n"
+            "Unable to retrieve structured OHLCV (used for factor calculation). The following technical summary at the price level is provided as an alternative:\n\n"
             + (fallback or "(no data)")
         )
 

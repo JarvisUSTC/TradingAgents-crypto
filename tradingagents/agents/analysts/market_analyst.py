@@ -61,7 +61,11 @@ def create_market_analyst(llm, toolkit):
         
         if is_crypto:
             # Use crypto-specific tools
-            tools = [toolkit.get_crypto_price_history, toolkit.get_crypto_technical_analysis]
+            tools = [
+                toolkit.get_crypto_factor_report,
+                toolkit.get_crypto_technical_analysis,
+                toolkit.get_crypto_price_history,
+            ]
             
             system_message = (
                 """You are a cryptocurrency technical analyst tasked with analyzing crypto markets. Your role is to provide comprehensive technical analysis for cryptocurrency trading. Focus on crypto-specific patterns and indicators that are most relevant for digital assets.

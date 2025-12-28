@@ -1,4 +1,4 @@
-from typing import Annotated, Sequence
+from typing import Annotated, Sequence, Dict, Any
 from datetime import date, timedelta, datetime
 from typing_extensions import TypedDict, Optional
 from langchain_openai import ChatOpenAI
@@ -60,6 +60,10 @@ class AgentState(MessagesState):
         str, "Report from the News Researcher of current world affairs"
     ]
     fundamentals_report: Annotated[str, "Report from the Fundamentals Researcher"]
+
+    # research backtest (research only)
+    backtest_report: Annotated[str, "Research backtest report derived from OHLCV"]
+    backtest_metrics: Annotated[Dict[str, Any], "Key backtest metrics (e.g., return, sharpe, drawdown)"]
 
     # researcher team discussion step
     investment_debate_state: Annotated[

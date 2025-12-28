@@ -9,6 +9,7 @@ def create_research_manager(llm, memory):
         sentiment_report = state["sentiment_report"]
         news_report = state["news_report"]
         fundamentals_report = state["fundamentals_report"]
+        backtest_report = state.get("backtest_report", "")
 
         investment_debate_state = state["investment_debate_state"]
 
@@ -23,6 +24,8 @@ def create_research_manager(llm, memory):
 
 Summarize the key points from both sides concisely, focusing on the most compelling evidence or reasoning. Your recommendation—Buy, Sell, or Hold—must be clear and actionable. Avoid defaulting to Hold simply because both sides have valid points; commit to a stance grounded in the debate's strongest arguments.
 
+When available, incorporate the deterministic research backtest summary as quantitative evidence. Do not blindly follow it; use it to validate or challenge the narrative arguments.
+
 Additionally, develop a detailed investment plan for the trader. This should include:
 
 Your Recommendation: A decisive stance supported by the most convincing arguments.
@@ -35,7 +38,10 @@ Here are your past reflections on mistakes:
 
 Here is the debate:
 Debate History:
-{history}"""
+{history}
+
+Deterministic research backtest summary (quant evidence):
+{backtest_report}"""
         response = llm.invoke(prompt)
 
         new_investment_debate_state = {
