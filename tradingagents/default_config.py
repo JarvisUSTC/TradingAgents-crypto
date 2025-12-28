@@ -19,4 +19,31 @@ DEFAULT_CONFIG = {
     "max_recur_limit": 100,
     # Tool settings
     "online_tools": True,
+
+    # ===== Hummingbot market data (research only, no live trading) =====
+    # When enabled, crypto price/technical tools will use Hummingbot candles feeds
+    # (public endpoints) instead of CoinGecko for OHLCV/time-series.
+    "hummingbot_market_data": {
+        # Default to disabled because the vendored Hummingbot requires Python>=3.10.
+        "enabled": os.getenv("TRADINGAGENTS_HB_MD_ENABLED", "0").lower() in ("1", "true", "yes", "y"),
+        # Spot connector name used by Hummingbot candles feeds, e.g. "binance", "okx", "bybit".
+        "connector": os.getenv("TRADINGAGENTS_HB_MD_CONNECTOR", "binance"),
+        # Quote asset used to map symbol -> trading_pair, e.g. BTC -> BTC-USDT.
+        "quote_asset": os.getenv("TRADINGAGENTS_HB_MD_QUOTE", "USDT"),
+        # Candles interval, must be supported by Hummingbot candles feeds (e.g. "1m", "5m", "1h", "1d").
+        "interval": os.getenv("TRADINGAGENTS_HB_MD_INTERVAL", "1d"),
+        # For historical fetch/cache in Hummingbot MarketDataProvider.
+        "max_cache_records": int(os.getenv("TRADINGAGENTS_HB_MD_MAX_CACHE", "10000")),
+        # Prefer historical REST fetch instead of realtime WS feed (better for research/backtest).
+        "prefer_historical": os.getenv("TRADINGAGENTS_HB_MD_PREFER_HIST", "1").lower() in ("1", "true", "yes", "y"),
+
+        # Optional: persist fetched candles to disk (CSV) for research reproducibility.
+        # Set to empty/None to disable.
+        "cache_dir": os.getenv("TRADINGAGENTS_HB_MD_CACHE_DIR", ""),
+    },
+
+    # ===== Research factor defaults =====
+    "factor": {
+        "look_back_days": int(os.getenv("TRADINGAGENTS_FACTOR_LOOKBACK_DAYS", "180")),
+    },
 }

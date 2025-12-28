@@ -505,3 +505,16 @@ class Toolkit:
             str: Fundamental analysis including market metrics, supply data, and crypto-specific fundamentals
         """
         return interface.get_crypto_fundamentals_analysis(symbol, curr_date)
+
+    @staticmethod
+    @tool
+    def get_crypto_factor_report(
+        symbol: Annotated[str, "Cryptocurrency symbol like BTC, ETH, ADA"],
+        curr_date: Annotated[str, "Current date in yyyy-mm-dd format"],
+        look_back_days: Annotated[int, "How many days to look back"] = 180,
+    ) -> str:
+        """Generate a research-oriented factor report from OHLCV.
+
+        This is intended for factor mining / research, not for live trading execution.
+        """
+        return interface.get_crypto_factor_report(symbol, curr_date, look_back_days)

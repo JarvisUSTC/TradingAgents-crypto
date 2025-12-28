@@ -20,6 +20,9 @@ from tqdm import tqdm
 import yfinance as yf
 from openai import OpenAI
 from .config import get_config, set_config, DATA_DIR
+import asyncio
+import os
+import threading
 
 
 def get_finnhub_news(
@@ -815,6 +818,130 @@ def get_fundamentals_openai(ticker, curr_date):
 
 # ===== CRYPTO TRADING FUNCTIONS =====
 
+def _get_hb_md_provider():
+    """Helper to get or create a Hummingbot MarketDataProvider (singleton-like for this session)"""
+    if not hasattr(_get_hb_md_provider, "_provider"):
+        # Import Hummingbot lazily. The caller is responsible for providing a working environment.
+        from hummingbot.data_feed.market_data_provider import MarketDataProvider
+
+        # MarketDataProvider requires a dict of connectors.
+        # For public candles access in research mode, we don't need authenticated trading connectors.
+        _get_hb_md_provider._provider = MarketDataProvider(connectors={})
+    return _get_hb_md_provider._provider
+
+
+def _run_coro_sync(coro):
+    """Run an async coroutine from sync code safely (even if an event loop is already running)."""
+    try:
+        loop = asyncio.get_event_loop()
+    except RuntimeError:
+        loop = None
+
+    if loop is None or not loop.is_running():
+        return asyncio.run(coro)
+
+    # If there's already a running loop (e.g., called from an async context), run in a new thread.
+    result_container = {"value": None, "error": None}
+
+    def _worker():
+        try:
+            new_loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(new_loop)
+            result_container["value"] = new_loop.run_until_complete(coro)
+        except Exception as e:
+            result_container["error"] = e
+        finally:
+            try:
+                new_loop.close()
+            except Exception:
+                pass
+
+    t = threading.Thread(target=_worker, daemon=True)
+    t.start()
+    t.join()
+    if result_container["error"] is not None:
+        raise result_container["error"]
+    return result_container["value"]
+
+def _format_hb_candles_to_report(symbol: str, df: pd.DataFrame, start_date: str, end_date: str) -> str:
+    """Helper to format Hummingbot candles DataFrame into the string report expected by the LLM"""
+    if df is None or df.empty:
+        return f"No price data available for {symbol} via Hummingbot."
+
+    # Hummingbot candles columns: ["timestamp", "open", "high", "low", "close", "volume", ...]
+    # Convert timestamp (ms) to YYYY-MM-DD
+    df = df.copy()
+    df["date"] = pd.to_datetime(df["timestamp"], unit="ms").dt.strftime("%Y-%m-%d")
+    
+    result_str = f"## {symbol.upper()} Price Data (via Hummingbot) from {start_date} to {end_date}:\n\n"
+    
+    # Only take the relevant range and last few points if too many (similar to original logic)
+    # The df returned by get_historical_candles_df is already filtered by time usually.
+    # We'll show up to 30 records to match original behavior.
+    records_to_show = df.tail(30)
+    
+    for _, row in records_to_show.iterrows():
+        result_str += f"Date: {row['date']}\n"
+        result_str += f"Price: ${row['close']:,.2f}\n"
+        result_str += f"Volume: ${row['volume']:,.0f}\n"
+        result_str += f"High: ${row['high']:,.2f} | Low: ${row['low']:,.2f}\n\n"
+    
+    return result_str
+
+def _fetch_hb_historical_data(symbol: str, start_date: str, end_date: str, interval: str):
+    """Sync wrapper for the async HB historical fetch"""
+    config = get_config()
+    hb_cfg = config.get("hummingbot_market_data", {})
+    connector = hb_cfg.get("connector", "binance")
+    quote = hb_cfg.get("quote_asset", "USDT")
+    trading_pair = f"{symbol.upper()}-{quote.upper()}"
+    max_cache = hb_cfg.get("max_cache_records", 10000)
+
+    # Convert YYYY-MM-DD to timestamp (seconds)
+    start_ts = int(datetime.strptime(start_date, "%Y-%m-%d").timestamp())
+    end_ts = int(datetime.strptime(end_date, "%Y-%m-%d").timestamp())
+
+    provider = _get_hb_md_provider()
+
+    # Optional cache: persist candles to disk for research reproducibility and faster reruns.
+    hb_cfg = config.get("hummingbot_market_data", {})
+    cache_dir = hb_cfg.get("cache_dir")
+    if isinstance(cache_dir, str) and cache_dir.strip() == "":
+        cache_dir = None
+    if cache_dir:
+        try:
+            os.makedirs(cache_dir, exist_ok=True)
+        except Exception:
+            cache_dir = None
+
+    cache_path = None
+    if cache_dir:
+        safe_pair = trading_pair.replace("/", "_")
+        cache_path = os.path.join(cache_dir, f"hb_candles_{connector}_{safe_pair}_{interval}_{start_date}_{end_date}.csv")
+        if os.path.exists(cache_path):
+            try:
+                cached = pd.read_csv(cache_path)
+                if not cached.empty and "timestamp" in cached.columns:
+                    return cached
+            except Exception:
+                pass
+    
+    df = _run_coro_sync(provider.get_historical_candles_df(
+        connector_name=connector,
+        trading_pair=trading_pair,
+        interval=interval,
+        start_time=start_ts,
+        end_time=end_ts,
+        max_cache_records=max_cache
+    ))
+
+    if cache_path and df is not None and not df.empty:
+        try:
+            df.to_csv(cache_path, index=False)
+        except Exception:
+            pass
+    return df
+
 def get_crypto_market_analysis(
     symbol: Annotated[str, "Cryptocurrency symbol like BTC, ETH, ADA"],
     curr_date: Annotated[str, "Current date in yyyy-mm-dd format"],
@@ -854,6 +981,18 @@ def get_crypto_price_history(
     start_date_obj = curr_date_obj - timedelta(days=look_back_days)
     start_date = start_date_obj.strftime("%Y-%m-%d")
     
+    config = get_config()
+    hb_cfg = config.get("hummingbot_market_data", {})
+    
+    if hb_cfg.get("enabled", False):
+        try:
+            interval = hb_cfg.get("interval", "1d")
+            df = _fetch_hb_historical_data(symbol, start_date, curr_date, interval)
+            return _format_hb_candles_to_report(symbol, df, start_date, curr_date)
+        except Exception as e:
+            # Fallback to the existing CoinGecko implementation.
+            _ = e
+
     return get_crypto_price_data(symbol, start_date, curr_date)
 
 
@@ -873,7 +1012,175 @@ def get_crypto_technical_analysis(
     Returns:
         String containing technical analysis
     """
+    config = get_config()
+    hb_cfg = config.get("hummingbot_market_data", {})
+    
+    if hb_cfg.get("enabled", False):
+        try:
+            from datetime import datetime, timedelta
+            curr_date_obj = datetime.strptime(curr_date, "%Y-%m-%d")
+            start_date_obj = curr_date_obj - timedelta(days=look_back_days)
+            start_date = start_date_obj.strftime("%Y-%m-%d")
+            
+            interval = hb_cfg.get("interval", "1d")
+            df = _fetch_hb_historical_data(symbol, start_date, curr_date, interval)
+            
+            if df is not None and not df.empty:
+                # Compute simple indicators from HB DataFrame instead of calling CoinGecko
+                current_price = float(df['close'].iloc[-1])
+                avg_7d = float(df['close'].tail(min(len(df), 7)).mean())
+                avg_30d = float(df['close'].tail(min(len(df), 30)).mean())
+                high_30 = float(df['high'].tail(min(len(df), 30)).max())
+                low_30 = float(df['low'].tail(min(len(df), 30)).min())
+                vol_7d = float(df['volume'].tail(min(len(df), 7)).mean())
+                
+                trend_7d = "Bullish" if current_price > avg_7d else "Bearish"
+                trend_30d = "Bullish" if current_price > avg_30d else "Bearish"
+                
+                report = f"## {symbol.upper()} Technical Analysis (via Hummingbot - {look_back_days} days):\n\n"
+                report += f"**Price Levels:**\n"
+                report += f"- Current Price: ${current_price:,.2f}\n"
+                report += f"- 7-day Average: ${avg_7d:,.2f}\n"
+                report += f"- 30-day Average: ${avg_30d:,.2f}\n"
+                report += f"- 30-day High: ${high_30:,.2f}\n"
+                report += f"- 30-day Low: ${low_30:,.2f}\n\n"
+                report += f"**Volume Analysis:**\n"
+                report += f"- 7-day Average Volume: ${vol_7d:,.0f}\n\n"
+                report += f"**Trend Analysis:**\n"
+                report += f"- 7-day Trend: {trend_7d}\n"
+                report += f"- 30-day Trend: {trend_30d}\n"
+                report += f"- Distance from 30d High: {((current_price - high_30) / high_30 * 100):+.1f}%\n"
+                report += f"- Distance from 30d Low: {((current_price - low_30) / low_30 * 100):+.1f}%\n"
+                return report
+        except Exception as e:
+            _ = e
+
     return get_crypto_technical_indicators(symbol, curr_date, look_back_days)
+
+
+def get_crypto_factor_report(
+    symbol: Annotated[str, "Cryptocurrency symbol like BTC, ETH, ADA"],
+    curr_date: Annotated[str, "Current date in yyyy-mm-dd format"],
+    look_back_days: Annotated[int, "How many days to look back"] = 180,
+) -> str:
+    """Generate a research-oriented factor report from OHLCV.
+
+    - Prefer Hummingbot candles if enabled.
+    - Fallback: use CoinGecko technical indicators (price-only) when OHLCV is not available.
+    """
+    from datetime import datetime, timedelta
+
+    config = get_config()
+    hb_cfg = config.get("hummingbot_market_data", {})
+
+    curr_dt = datetime.strptime(curr_date, "%Y-%m-%d")
+    start_dt = curr_dt - timedelta(days=look_back_days)
+    start_date = start_dt.strftime("%Y-%m-%d")
+
+    df = None
+    used_source = "coingecko"
+    if hb_cfg.get("enabled", False):
+        try:
+            interval = hb_cfg.get("interval", "1d")
+            df = _fetch_hb_historical_data(symbol, start_date, curr_date, interval)
+            used_source = f"hummingbot({hb_cfg.get('connector', '')},{interval})"
+        except Exception:
+            df = None
+
+    if df is None or df.empty:
+        # No structured OHLCV available; return existing price-based technical summary as fallback.
+        fallback = get_crypto_technical_indicators(symbol, curr_date, look_back_days)
+        return (
+            f"## {symbol.upper()} Factor Report (fallback: CoinGecko price-only)\n\n"
+            "无法获取结构化 OHLCV（用于因子计算）。以下返回价格层面的技术摘要作为替代：\n\n"
+            + (fallback or "(no data)")
+        )
+
+    # Normalize columns and time
+    work = df.copy()
+    if "timestamp" in work.columns:
+        work["date"] = pd.to_datetime(work["timestamp"], unit="ms").dt.date.astype(str)
+    else:
+        work["date"] = ""
+
+    # Ensure numeric
+    for c in ("open", "high", "low", "close", "volume"):
+        if c in work.columns:
+            work[c] = pd.to_numeric(work[c], errors="coerce")
+
+    work = work.dropna(subset=["close"]).reset_index(drop=True)
+    if work.empty:
+        return f"## {symbol.upper()} Factor Report\n\nNo valid close prices available."
+
+    close = work["close"]
+    ret_1 = close.pct_change()
+    # Log returns (optional; not all factors use it)
+    try:
+        import numpy as np
+        logret_1 = np.log(close / close.shift(1))
+    except Exception:
+        logret_1 = None
+
+    # Common factor-like summaries
+    mom_7 = close.pct_change(7)
+    mom_30 = close.pct_change(30)
+    vol_30 = ret_1.rolling(30).std() * (30 ** 0.5)
+    vol_90 = ret_1.rolling(90).std() * (90 ** 0.5)
+    ma_20 = close.rolling(20).mean()
+    ma_60 = close.rolling(60).mean()
+    ma_ratio_20 = close / ma_20 - 1
+    ma_ratio_60 = close / ma_60 - 1
+
+    # RSI(14)
+    delta = close.diff()
+    gain = delta.clip(lower=0)
+    loss = (-delta).clip(lower=0)
+    avg_gain = gain.rolling(14).mean()
+    avg_loss = loss.rolling(14).mean()
+    rs = avg_gain / avg_loss.replace(0, pd.NA)
+    rsi_14 = 100 - (100 / (1 + rs))
+
+    # Volume zscore (20)
+    vol = work["volume"] if "volume" in work.columns else pd.Series([pd.NA] * len(work))
+    vol_z20 = (vol - vol.rolling(20).mean()) / vol.rolling(20).std()
+
+    # Latest snapshot
+    last_idx = len(work) - 1
+    def _fmt(x, pct=False, digits=4):
+        if x is None or (isinstance(x, float) and (pd.isna(x))):
+            return "N/A"
+        try:
+            if pct:
+                return f"{float(x) * 100:.2f}%"
+            return f"{float(x):.{digits}f}"
+        except Exception:
+            return "N/A"
+
+    last_date = work.loc[last_idx, "date"] if "date" in work.columns else curr_date
+    last_close = close.iloc[last_idx]
+
+    report = f"## {symbol.upper()} Factor Report (source: {used_source})\n\n"
+    report += f"**As of:** {last_date}\n"
+    report += f"**Close:** ${float(last_close):,.4f}\n\n"
+
+    report += "**Momentum:**\n"
+    report += f"- 7D momentum: {_fmt(mom_7.iloc[last_idx], pct=True)}\n"
+    report += f"- 30D momentum: {_fmt(mom_30.iloc[last_idx], pct=True)}\n\n"
+
+    report += "**Volatility (annualized-ish over window):**\n"
+    report += f"- 30D vol: {_fmt(vol_30.iloc[last_idx], digits=4)}\n"
+    report += f"- 90D vol: {_fmt(vol_90.iloc[last_idx], digits=4)}\n\n"
+
+    report += "**Trend (MA distance):**\n"
+    report += f"- price vs MA20: {_fmt(ma_ratio_20.iloc[last_idx], pct=True)}\n"
+    report += f"- price vs MA60: {_fmt(ma_ratio_60.iloc[last_idx], pct=True)}\n\n"
+
+    report += "**Mean-reversion / Overbought:**\n"
+    report += f"- RSI(14): {_fmt(rsi_14.iloc[last_idx], digits=2)}\n\n"
+
+    report += "**Liquidity / Activity:**\n"
+    report += f"- Volume zscore(20): {_fmt(vol_z20.iloc[last_idx], digits=2)}\n"
+    return report
 
 
 def get_crypto_news_analysis(
