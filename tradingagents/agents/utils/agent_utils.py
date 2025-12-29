@@ -643,7 +643,7 @@ class Toolkit:
         backtesting_resolution: Annotated[
             str,
             "Backtesting candle resolution, e.g. '1m', '5m', '1h'",
-        ] = "1m",
+        ] = "5m",
         trade_cost: Annotated[
             float,
             "Assumed per-trade cost (as a fraction, e.g. 0.0006 for 6 bps)",
@@ -693,7 +693,7 @@ class Toolkit:
             "config": config_dict,
         }
         response = requests.post(
-            url, json=backtesting_payload, auth=auth, timeout=600
+            url, json=backtesting_payload, auth=auth, timeout=60
         )
         response.raise_for_status()
         return response.text

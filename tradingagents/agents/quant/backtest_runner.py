@@ -57,18 +57,20 @@ Summarize the key metrics and provide a concise evaluation of this strategy's pe
             trade_date,
         )
 
+        backtest_results = json.loads(raw_results)['results']
+
         chain = prompt | llm
         result = chain.invoke(
             {
                 "company_of_interest": state["company_of_interest"],
                 "trade_date": state["trade_date"],
-                "raw_results": raw_results,
+                "raw_results": str(backtest_results),
             }
         )
         content = result.content if hasattr(result, "content") else str(result)
 
         return {
-            "backtest_results": raw_results,
+            "backtest_results": backtest_results,
             "selected_strategy_summary": content,
             "sender": "Backtest Runner",
             "messages": state["messages"] + [result],
