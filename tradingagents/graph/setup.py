@@ -100,6 +100,18 @@ class GraphSetup:
         )
         trader_node = create_trader(self.quick_thinking_llm, self.trader_memory)
 
+        # Create quantitative research and strategy nodes
+        factor_researcher_node = create_factor_researcher(
+            self.quick_thinking_llm, self.toolkit
+        )
+        strategy_designer_node = create_strategy_designer(
+            self.quick_thinking_llm, self.toolkit
+        )
+        backtest_runner_node = create_backtest_runner(
+            self.quick_thinking_llm, self.toolkit
+        )
+        strategy_evaluator_node = create_strategy_evaluator(self.quick_thinking_llm)
+
         # Create risk analysis nodes
         risky_analyst = create_risky_debator(self.quick_thinking_llm)
         neutral_analyst = create_neutral_debator(self.quick_thinking_llm)
@@ -128,6 +140,12 @@ class GraphSetup:
         workflow.add_node("Neutral Analyst", neutral_analyst)
         workflow.add_node("Safe Analyst", safe_analyst)
         workflow.add_node("Risk Judge", risk_manager_node)
+
+        # Quantitative research and strategy nodes
+        workflow.add_node("Factor Researcher", factor_researcher_node)
+        workflow.add_node("Strategy Designer", strategy_designer_node)
+        workflow.add_node("Backtest Runner", backtest_runner_node)
+        workflow.add_node("Strategy Evaluator", strategy_evaluator_node)
 
         # Define edges
         # Start with the first analyst
@@ -172,7 +190,21 @@ class GraphSetup:
                 "Research Manager": "Research Manager",
             },
         )
-        workflow.add_edge("Research Manager", "Trader")
+        # Research manager leads into quantitative strategy loop before Trader
+        workflow.add_edge("Research Manager", "Factor Researcher")
+
+        # Quantitative loop: factor -> strategy design -> backtest -> evaluator
+        workflow.add_edge("Factor Researcher", "Strategy Designer")
+        workflow.add_edge("Strategy Designer", "Backtest Runner")
+        workflow.add_edge("Backtest Runner", "Strategy Evaluator")
+        workflow.add_conditional_edges(
+            "Strategy Evaluator",
+            self.conditional_logic.should_continue_backtesting,
+            {
+                "Strategy Designer": "Strategy Designer",
+                "Trader": "Trader",
+            },
+        )
         workflow.add_edge("Trader", "Risky Analyst")
         workflow.add_conditional_edges(
             "Risky Analyst",

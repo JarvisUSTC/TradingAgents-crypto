@@ -60,23 +60,23 @@ class TradingAgentsGraph:
         # Initialize LLMs
         if self.config["llm_provider"].lower() == "openai" or self.config["llm_provider"] == "ollama" or self.config["llm_provider"] == "openrouter":
             self.deep_thinking_llm = ChatOpenAI(
-                model=self.config["deep_think_llm"], 
+                model=self.config["deep_think_llm"],
                 base_url=self.config["backend_url"],
                 api_key=self.config["api_key"]
             )
             self.quick_thinking_llm = ChatOpenAI(
-                model=self.config["quick_think_llm"], 
+                model=self.config["quick_think_llm"],
                 base_url=self.config["backend_url"],
                 api_key=self.config["api_key"]
             )
         elif self.config["llm_provider"].lower() == "anthropic":
             self.deep_thinking_llm = ChatAnthropic(
-                model=self.config["deep_think_llm"], 
+                model=self.config["deep_think_llm"],
                 base_url=self.config["backend_url"],
                 api_key=self.config["api_key"]
             )
             self.quick_thinking_llm = ChatAnthropic(
-                model=self.config["quick_think_llm"], 
+                model=self.config["quick_think_llm"],
                 base_url=self.config["backend_url"],
                 api_key=self.config["api_key"]
             )
@@ -90,16 +90,20 @@ class TradingAgentsGraph:
                 google_api_key=self.config["api_key"]
             )
         else:
-            raise ValueError(f"Unsupported LLM provider: {self.config['llm_provider']}")
-        
+            raise ValueError(
+                f"Unsupported LLM provider: {self.config['llm_provider']}")
+
         self.toolkit = Toolkit(config=self.config)
 
         # Initialize memories
         self.bull_memory = FinancialSituationMemory("bull_memory", self.config)
         self.bear_memory = FinancialSituationMemory("bear_memory", self.config)
-        self.trader_memory = FinancialSituationMemory("trader_memory", self.config)
-        self.invest_judge_memory = FinancialSituationMemory("invest_judge_memory", self.config)
-        self.risk_manager_memory = FinancialSituationMemory("risk_manager_memory", self.config)
+        self.trader_memory = FinancialSituationMemory(
+            "trader_memory", self.config)
+        self.invest_judge_memory = FinancialSituationMemory(
+            "invest_judge_memory", self.config)
+        self.risk_manager_memory = FinancialSituationMemory(
+            "risk_manager_memory", self.config)
 
         # Create tool nodes
         self.tool_nodes = self._create_tool_nodes()
@@ -185,6 +189,16 @@ class TradingAgentsGraph:
                     self.toolkit.get_crypto_market_analysis,
                 ]
             ),
+            "quant": ToolNode(
+                [
+                    # Hummingbot-based quantitative tools
+                    self.toolkit.hb_get_candles,
+                    self.toolkit.hb_get_order_book,
+                    self.toolkit.hb_get_controller_template,
+                    self.toolkit.hb_list_controller_configs,
+                    self.toolkit.hb_run_backtest,
+                ]
+            ),
         }
 
     def propagate(self, company_name, trade_date):
@@ -255,7 +269,8 @@ class TradingAgentsGraph:
         }
 
         # Save to file
-        directory = Path(f"eval_results/{self.ticker}/TradingAgentsStrategy_logs/")
+        directory = Path(
+            f"eval_results/{self.ticker}/TradingAgentsStrategy_logs/")
         directory.mkdir(parents=True, exist_ok=True)
 
         with open(

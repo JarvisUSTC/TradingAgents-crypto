@@ -18,6 +18,10 @@ from .managers.research_manager import create_research_manager
 from .managers.risk_manager import create_risk_manager
 
 from .trader.trader import create_trader
+from .quant.factor_researcher import create_factor_researcher
+from .quant.strategy_designer import create_strategy_designer
+from .quant.backtest_runner import create_backtest_runner
+from .quant.strategy_evaluator import create_strategy_evaluator
 
 __all__ = [
     "FinancialSituationMemory",
@@ -38,4 +42,8 @@ __all__ = [
     "create_safe_debator",
     "create_social_media_analyst",
     "create_trader",
+    "create_factor_researcher",
+    "create_strategy_designer",
+    "create_backtest_runner",
+    "create_strategy_evaluator",
 ]

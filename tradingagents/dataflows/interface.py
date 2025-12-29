@@ -46,7 +46,8 @@ def get_finnhub_news(
     before = start_date - relativedelta(days=look_back_days)
     before = before.strftime("%Y-%m-%d")
 
-    result = get_data_in_range(ticker, before, curr_date, "news_data", DATA_DIR)
+    result = get_data_in_range(
+        ticker, before, curr_date, "news_data", DATA_DIR)
 
     if len(result) == 0:
         return ""
@@ -57,7 +58,8 @@ def get_finnhub_news(
             continue
         for entry in data:
             current_news = (
-                "### " + entry["headline"] + f" ({day})" + "\n" + entry["summary"]
+                "### " + entry["headline"] +
+                f" ({day})" + "\n" + entry["summary"]
             )
             combined_result += current_news + "\n\n"
 
@@ -85,7 +87,8 @@ def get_finnhub_company_insider_sentiment(
     before = date_obj - relativedelta(days=look_back_days)
     before = before.strftime("%Y-%m-%d")
 
-    data = get_data_in_range(ticker, before, curr_date, "insider_senti", DATA_DIR)
+    data = get_data_in_range(ticker, before, curr_date,
+                             "insider_senti", DATA_DIR)
 
     if len(data) == 0:
         return ""
@@ -126,7 +129,8 @@ def get_finnhub_company_insider_transactions(
     before = date_obj - relativedelta(days=look_back_days)
     before = before.strftime("%Y-%m-%d")
 
-    data = get_data_in_range(ticker, before, curr_date, "insider_trans", DATA_DIR)
+    data = get_data_in_range(ticker, before, curr_date,
+                             "insider_trans", DATA_DIR)
 
     if len(data) == 0:
         return ""
@@ -167,14 +171,17 @@ def get_simfin_balance_sheet(
     df = pd.read_csv(data_path, sep=";")
 
     # Convert date strings to datetime objects and remove any time components
-    df["Report Date"] = pd.to_datetime(df["Report Date"], utc=True).dt.normalize()
-    df["Publish Date"] = pd.to_datetime(df["Publish Date"], utc=True).dt.normalize()
+    df["Report Date"] = pd.to_datetime(
+        df["Report Date"], utc=True).dt.normalize()
+    df["Publish Date"] = pd.to_datetime(
+        df["Publish Date"], utc=True).dt.normalize()
 
     # Convert the current date to datetime and normalize
     curr_date_dt = pd.to_datetime(curr_date, utc=True).normalize()
 
     # Filter the DataFrame for the given ticker and for reports that were published on or before the current date
-    filtered_df = df[(df["Ticker"] == ticker) & (df["Publish Date"] <= curr_date_dt)]
+    filtered_df = df[(df["Ticker"] == ticker) & (
+        df["Publish Date"] <= curr_date_dt)]
 
     # Check if there are any available reports; if not, return a notification
     if filtered_df.empty:
@@ -182,7 +189,8 @@ def get_simfin_balance_sheet(
         return ""
 
     # Get the most recent balance sheet by selecting the row with the latest Publish Date
-    latest_balance_sheet = filtered_df.loc[filtered_df["Publish Date"].idxmax()]
+    latest_balance_sheet = filtered_df.loc[filtered_df["Publish Date"].idxmax(
+    )]
 
     # drop the SimFinID column
     latest_balance_sheet = latest_balance_sheet.drop("SimFinId")
@@ -214,14 +222,17 @@ def get_simfin_cashflow(
     df = pd.read_csv(data_path, sep=";")
 
     # Convert date strings to datetime objects and remove any time components
-    df["Report Date"] = pd.to_datetime(df["Report Date"], utc=True).dt.normalize()
-    df["Publish Date"] = pd.to_datetime(df["Publish Date"], utc=True).dt.normalize()
+    df["Report Date"] = pd.to_datetime(
+        df["Report Date"], utc=True).dt.normalize()
+    df["Publish Date"] = pd.to_datetime(
+        df["Publish Date"], utc=True).dt.normalize()
 
     # Convert the current date to datetime and normalize
     curr_date_dt = pd.to_datetime(curr_date, utc=True).normalize()
 
     # Filter the DataFrame for the given ticker and for reports that were published on or before the current date
-    filtered_df = df[(df["Ticker"] == ticker) & (df["Publish Date"] <= curr_date_dt)]
+    filtered_df = df[(df["Ticker"] == ticker) & (
+        df["Publish Date"] <= curr_date_dt)]
 
     # Check if there are any available reports; if not, return a notification
     if filtered_df.empty:
@@ -261,14 +272,17 @@ def get_simfin_income_statements(
     df = pd.read_csv(data_path, sep=";")
 
     # Convert date strings to datetime objects and remove any time components
-    df["Report Date"] = pd.to_datetime(df["Report Date"], utc=True).dt.normalize()
-    df["Publish Date"] = pd.to_datetime(df["Publish Date"], utc=True).dt.normalize()
+    df["Report Date"] = pd.to_datetime(
+        df["Report Date"], utc=True).dt.normalize()
+    df["Publish Date"] = pd.to_datetime(
+        df["Publish Date"], utc=True).dt.normalize()
 
     # Convert the current date to datetime and normalize
     curr_date_dt = pd.to_datetime(curr_date, utc=True).normalize()
 
     # Filter the DataFrame for the given ticker and for reports that were published on or before the current date
-    filtered_df = df[(df["Ticker"] == ticker) & (df["Publish Date"] <= curr_date_dt)]
+    filtered_df = df[(df["Ticker"] == ticker) & (
+        df["Publish Date"] <= curr_date_dt)]
 
     # Check if there are any available reports; if not, return a notification
     if filtered_df.empty:
@@ -337,7 +351,8 @@ def get_reddit_global_news(
     curr_date = datetime.strptime(before, "%Y-%m-%d")
 
     total_iterations = (start_date - curr_date).days + 1
-    pbar = tqdm(desc=f"Getting Global News on {start_date}", total=total_iterations)
+    pbar = tqdm(
+        desc=f"Getting Global News on {start_date}", total=total_iterations)
 
     while curr_date <= start_date:
         curr_date_str = curr_date.strftime("%Y-%m-%d")
@@ -740,7 +755,7 @@ def get_stock_news_openai(ticker, curr_date):
         store=True,
     )
 
-    return response.output[1].content[0].text
+    return response.output[-1].content[0].text
 
 
 def get_global_news_openai(curr_date):
@@ -821,11 +836,11 @@ def get_crypto_market_analysis(
 ) -> str:
     """
     Get comprehensive market analysis for a cryptocurrency
-    
+
     Args:
         symbol: Crypto symbol (e.g., 'BTC', 'ETH', 'ADA')
         curr_date: Current date in yyyy-mm-dd format
-    
+
     Returns:
         String containing market data and analysis
     """
@@ -839,21 +854,21 @@ def get_crypto_price_history(
 ) -> str:
     """
     Get historical price data for a cryptocurrency
-    
+
     Args:
         symbol: Crypto symbol (e.g., 'BTC', 'ETH', 'ADA')
         curr_date: Current date in yyyy-mm-dd format
         look_back_days: Number of days to look back
-    
+
     Returns:
         String containing historical price data
     """
     from datetime import datetime, timedelta
-    
+
     curr_date_obj = datetime.strptime(curr_date, "%Y-%m-%d")
     start_date_obj = curr_date_obj - timedelta(days=look_back_days)
     start_date = start_date_obj.strftime("%Y-%m-%d")
-    
+
     return get_crypto_price_data(symbol, start_date, curr_date)
 
 
@@ -864,12 +879,12 @@ def get_crypto_technical_analysis(
 ) -> str:
     """
     Get technical analysis for a cryptocurrency
-    
+
     Args:
         symbol: Crypto symbol (e.g., 'BTC', 'ETH', 'ADA')
         curr_date: Current date in yyyy-mm-dd format
         look_back_days: Number of days to analyze
-    
+
     Returns:
         String containing technical analysis
     """
@@ -883,12 +898,12 @@ def get_crypto_news_analysis(
 ) -> str:
     """
     Get news and market trends for cryptocurrency
-    
+
     Args:
         symbol: Crypto symbol (e.g., 'BTC', 'ETH', 'ADA')
         curr_date: Current date in yyyy-mm-dd format
         look_back_days: Number of days to look back
-    
+
     Returns:
         String containing news and trends
     """
@@ -901,17 +916,17 @@ def get_crypto_fundamentals_analysis(
 ) -> str:
     """
     Get fundamental analysis for a cryptocurrency (different from traditional stocks)
-    
+
     Args:
         symbol: Crypto symbol (e.g., 'BTC', 'ETH', 'ADA')
         curr_date: Current date in yyyy-mm-dd format
-    
+
     Returns:
         String containing fundamental metrics like market cap, supply, etc.
     """
     # For crypto, fundamentals include market cap, supply metrics, dominance, etc.
     market_data = get_crypto_market_data(symbol)
-    
+
     # Add some additional context for crypto fundamentals
     additional_context = f"""
 
@@ -931,5 +946,5 @@ def get_crypto_fundamentals_analysis(
 - Developer activity and updates
 - Regulatory environment and compliance
 """
-    
+
     return market_data + additional_context

@@ -13,21 +13,23 @@ from langchain_openai import ChatOpenAI
 import tradingagents.dataflows.interface as interface
 from tradingagents.default_config import DEFAULT_CONFIG
 from langchain_core.messages import HumanMessage
+import json
+import requests
 
 
 def create_msg_delete():
     def delete_messages(state):
         """Clear messages and add placeholder for Anthropic compatibility"""
         messages = state["messages"]
-        
+
         # Remove all messages
         removal_operations = [RemoveMessage(id=m.id) for m in messages]
-        
+
         # Add a minimal placeholder message
         placeholder = HumanMessage(content="Continue")
-        
+
         return {"messages": removal_operations + [placeholder]}
-    
+
     return delete_messages
 
 
@@ -60,7 +62,7 @@ class Toolkit:
         Returns:
             str: A formatted dataframe containing the latest global news from Reddit in the specified time frame.
         """
-        
+
         global_news_result = interface.get_reddit_global_news(curr_date, 7, 5)
 
         return global_news_result
@@ -115,7 +117,8 @@ class Toolkit:
             str: A formatted dataframe containing the latest news about the company on the given date
         """
 
-        stock_news_results = interface.get_reddit_company_news(ticker, curr_date, 7, 5)
+        stock_news_results = interface.get_reddit_company_news(
+            ticker, curr_date, 7, 5)
 
         return stock_news_results
 
@@ -157,7 +160,8 @@ class Toolkit:
             str: A formatted dataframe containing the stock price data for the specified ticker symbol in the specified date range.
         """
 
-        result_data = interface.get_YFin_data_online(symbol, start_date, end_date)
+        result_data = interface.get_YFin_data_online(
+            symbol, start_date, end_date)
 
         return result_data
 
@@ -287,7 +291,8 @@ class Toolkit:
             str: a report of the company's most recent balance sheet
         """
 
-        data_balance_sheet = interface.get_simfin_balance_sheet(ticker, freq, curr_date)
+        data_balance_sheet = interface.get_simfin_balance_sheet(
+            ticker, freq, curr_date)
 
         return data_balance_sheet
 
@@ -376,7 +381,8 @@ class Toolkit:
             str: A formatted string containing the latest news about the company on the given date.
         """
 
-        openai_news_results = interface.get_stock_news_openai(ticker, curr_date)
+        openai_news_results = interface.get_stock_news_openai(
+            ticker, curr_date)
 
         return openai_news_results
 
@@ -505,3 +511,189 @@ class Toolkit:
             str: Fundamental analysis including market metrics, supply data, and crypto-specific fundamentals
         """
         return interface.get_crypto_fundamentals_analysis(symbol, curr_date)
+
+    # ===== HUMMINGBOT QUANT WORKFLOW TOOLS =====
+
+    @staticmethod
+    @tool
+    def hb_get_candles(
+        trading_pair: Annotated[str, "Trading pair, e.g. BTC-USDT"],
+        interval: Annotated[str, "Candle interval such as 1m, 5m, 1h, 1d"],
+        max_records: Annotated[int,
+                               "Maximum number of records to request"] = 500,
+    ) -> str:
+        """
+        Retrieve recent candle data from hummingbot-api for a given trading pair and interval.
+        This is typically used as input for factor computation and signal generation.
+        """
+        base_url = "http://hummingbot-api:8000"
+        url = f"{base_url}/market-data/candles"
+        payload = {
+            # Use OKX as the market data connector to avoid Binance limitations
+            "connector_name": "okx",
+            "trading_pair": trading_pair,
+            "interval": interval,
+            "max_records": max_records,
+        }
+        auth = (
+            os.environ.get("HUMMINGBOT_API_USERNAME", "admin"),
+            os.environ.get("HUMMINGBOT_API_PASSWORD", "admin"),
+        )
+        response = requests.post(url, json=payload, auth=auth, timeout=30)
+        response.raise_for_status()
+        return response.text
+
+    @staticmethod
+    @tool
+    def hb_get_order_book(
+        trading_pair: Annotated[str, "Trading pair, e.g. BTC-USDT"],
+        depth: Annotated[int, "Order book depth to request"],
+    ) -> str:
+        """
+        Retrieve current order book snapshot from hummingbot-api for a given trading pair.
+        This can be used to design microstructure or liquidity-sensitive factors.
+        """
+        base_url = "http://hummingbot-api:8000"
+        url = f"{base_url}/market-data/order-book"
+        payload = {
+            # Use OKX as the market data connector to avoid Binance limitations
+            "connector_name": "okx",
+            "trading_pair": trading_pair,
+            "depth": depth,
+        }
+        auth = (
+            os.environ.get("HUMMINGBOT_API_USERNAME", "admin"),
+            os.environ.get("HUMMINGBOT_API_PASSWORD", "admin"),
+        )
+        response = requests.post(url, json=payload, auth=auth, timeout=30)
+        response.raise_for_status()
+        return response.text
+
+    @staticmethod
+    @tool
+    def hb_get_controller_template(
+        controller_type: Annotated[str, "Controller type/category, e.g. spot, perpetual"],
+        controller_name: Annotated[str, "Controller name, e.g. avellaneda_market_making"],
+    ) -> str:
+        """
+        Retrieve the configuration template (schema + default values) for a given controller
+        from hummingbot-api. This allows LLM agents to fill in parameters instead of inventing schema.
+        """
+        base_url = "http://hummingbot-api:8000"
+        url = f"{base_url}/controllers/{controller_type}/{controller_name}/config/template"
+        auth = (
+            os.environ.get("HUMMINGBOT_API_USERNAME", "admin"),
+            os.environ.get("HUMMINGBOT_API_PASSWORD", "admin"),
+        )
+        response = requests.get(url, auth=auth, timeout=30)
+        response.raise_for_status()
+        return response.text
+
+    @staticmethod
+    @tool
+    def hb_list_controllers() -> str:
+        """
+        List available controllers grouped by type from hummingbot-api.
+        This corresponds to GET /controllers/ and returns a JSON mapping like:
+        {
+          "generic": [...],
+          "market_making": [...],
+          "directional_trading": [...]
+        }
+        """
+        base_url = "http://hummingbot-api:8000"
+        url = f"{base_url}/controllers/"
+        auth = (
+            os.environ.get("HUMMINGBOT_API_USERNAME", "admin"),
+            os.environ.get("HUMMINGBOT_API_PASSWORD", "admin"),
+        )
+        response = requests.get(url, auth=auth, timeout=30)
+        response.raise_for_status()
+        return response.text
+
+    @staticmethod
+    @tool
+    def hb_list_controller_configs() -> str:
+        """
+        List existing controller configurations from hummingbot-api.
+        This is useful as baseline strategies or examples for LLM-guided strategy design.
+        """
+        base_url = "http://hummingbot-api:8000"
+        url = f"{base_url}/controllers/configs"
+        auth = (
+            os.environ.get("HUMMINGBOT_API_USERNAME", "admin"),
+            os.environ.get("HUMMINGBOT_API_PASSWORD", "admin"),
+        )
+        response = requests.get(url, auth=auth, timeout=30)
+        response.raise_for_status()
+        return response.text
+
+    @staticmethod
+    @tool
+    def hb_run_backtest(
+        controller_config_json: Annotated[
+            str,
+            "JSON string of the controller configuration to be backtested.",
+        ],
+        trade_date: Annotated[
+            str,
+            "Trade date in YYYY-MM-DD format. "
+            "The backtest window will be the past 30 days ending at this date.",
+        ],
+        backtesting_resolution: Annotated[
+            str,
+            "Backtesting candle resolution, e.g. '1m', '5m', '1h'",
+        ] = "1m",
+        trade_cost: Annotated[
+            float,
+            "Assumed per-trade cost (as a fraction, e.g. 0.0006 for 6 bps)",
+        ] = 0.0006,
+    ) -> str:
+        """
+        Run a backtest for the provided controller configuration using hummingbot-api.
+
+        The input is a JSON string describing the full controller config; it will be
+        wrapped into a BacktestingConfig payload where start_time/end_time correspond
+        to the 30-day window ending at trade_date.
+
+        The output is the raw JSON results from the backtesting engine, including
+        performance metrics such as sharpe_ratio where available.
+        """
+        base_url = "http://hummingbot-api:8000"
+        url = f"{base_url}/backtesting/run-backtesting"
+        try:
+            config_dict = json.loads(controller_config_json)
+        except json.JSONDecodeError:
+            raise ValueError(
+                "controller_config_json must be a valid JSON string representing the controller configuration."
+            )
+
+        # Derive backtest window: past 30 days ending at trade_date
+        from datetime import datetime, timedelta
+
+        try:
+            end_dt = datetime.strptime(trade_date, "%Y-%m-%d")
+            start_dt = end_dt - timedelta(days=30)
+            start_time = int(start_dt.timestamp())
+            end_time = int(end_dt.timestamp())
+        except Exception as e:
+            raise ValueError(
+                f"trade_date must be in YYYY-MM-DD format; got '{trade_date}': {e}"
+            )
+
+        auth = (
+            os.environ.get("HUMMINGBOT_API_USERNAME", "admin"),
+            os.environ.get("HUMMINGBOT_API_PASSWORD", "admin"),
+        )
+        backtesting_payload = {
+            "start_time": start_time,
+            "end_time": end_time,
+            "backtesting_resolution": backtesting_resolution,
+            "trade_cost": trade_cost,
+            "config": config_dict,
+        }
+        response = requests.post(
+            url, json=backtesting_payload, auth=auth, timeout=600
+        )
+        response.raise_for_status()
+        return response.text

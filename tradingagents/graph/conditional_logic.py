@@ -65,3 +65,14 @@ class ConditionalLogic:
         if state["risk_debate_state"]["latest_speaker"].startswith("Safe"):
             return "Neutral Analyst"
         return "Risky Analyst"
+
+    def should_continue_backtesting(self, state: AgentState) -> str:
+        """
+        Determine if backtesting and strategy refinement should continue.
+
+        If strategy_acceptable is True, proceed to Trader.
+        Otherwise, loop back to Strategy Designer for refinement.
+        """
+        if state.get("strategy_acceptable"):
+            return "Trader"
+        return "Strategy Designer"
