@@ -222,6 +222,30 @@ class TradingAgentsGraph:
         # Return decision and processed signal
         return final_state, self.process_signal(final_state["final_trade_decision"])
 
+    def export_langgraph_mermaid(self) -> str:
+        """使用 LangGraph 内置能力导出流程图（Mermaid 文本）。
+
+        说明：LangGraph 的可视化接口通常暴露在 `compiled_graph.get_graph()` 返回对象上。
+        这里不引入额外依赖，只返回 Mermaid 字符串，便于写入 Markdown 或进一步渲染。
+        """
+        g = self.graph.get_graph()
+        return g.draw_mermaid()
+
+    def export_langgraph_png(self, output_path: str) -> str:
+        """使用 LangGraph 内置能力导出流程图 PNG。
+
+        Args:
+            output_path: 输出文件路径（例如 "./docs/langgraph.png"）
+
+        Returns:
+            实际写入的文件路径。
+        """
+        g = self.graph.get_graph()
+        png_bytes = g.draw_mermaid_png()
+        with open(output_path, "wb") as f:
+            f.write(png_bytes)
+        return output_path
+
     def _log_state(self, trade_date, final_state):
         """Log the final state to a JSON file."""
         self.log_states_dict[str(trade_date)] = {
