@@ -98,7 +98,6 @@ class GraphSetup:
         research_manager_node = create_research_manager(
             self.deep_thinking_llm, self.invest_judge_memory
         )
-        trader_node = create_trader(self.quick_thinking_llm, self.trader_memory)
 
         # Create quantitative research and strategy nodes
         factor_researcher_node = create_factor_researcher(
@@ -113,12 +112,9 @@ class GraphSetup:
         strategy_evaluator_node = create_strategy_evaluator(self.quick_thinking_llm)
 
         # Create risk analysis nodes
-        risky_analyst = create_risky_debator(self.quick_thinking_llm)
-        neutral_analyst = create_neutral_debator(self.quick_thinking_llm)
-        safe_analyst = create_safe_debator(self.quick_thinking_llm)
-        risk_manager_node = create_risk_manager(
-            self.deep_thinking_llm, self.risk_manager_memory
-        )
+        # Note: Trader and risk management nodes are intentionally omitted
+        # in this configuration. The quantitative backtest loop terminates
+        # directly after Strategy Evaluator.
 
         # Create workflow
         workflow = StateGraph(AgentState)
@@ -135,11 +131,6 @@ class GraphSetup:
         workflow.add_node("Bull Researcher", bull_researcher_node)
         workflow.add_node("Bear Researcher", bear_researcher_node)
         workflow.add_node("Research Manager", research_manager_node)
-        workflow.add_node("Trader", trader_node)
-        workflow.add_node("Risky Analyst", risky_analyst)
-        workflow.add_node("Neutral Analyst", neutral_analyst)
-        workflow.add_node("Safe Analyst", safe_analyst)
-        workflow.add_node("Risk Judge", risk_manager_node)
 
         # Quantitative research and strategy nodes
         workflow.add_node("Factor Researcher", factor_researcher_node)
@@ -201,37 +192,10 @@ class GraphSetup:
             "Strategy Evaluator",
             self.conditional_logic.should_continue_backtesting,
             {
-                "Strategy Designer": "Strategy Designer",
-                "Trader": "Trader",
+                "Factor Researcher": "Factor Researcher",
+                "END": END,
             },
         )
-        workflow.add_edge("Trader", "Risky Analyst")
-        workflow.add_conditional_edges(
-            "Risky Analyst",
-            self.conditional_logic.should_continue_risk_analysis,
-            {
-                "Safe Analyst": "Safe Analyst",
-                "Risk Judge": "Risk Judge",
-            },
-        )
-        workflow.add_conditional_edges(
-            "Safe Analyst",
-            self.conditional_logic.should_continue_risk_analysis,
-            {
-                "Neutral Analyst": "Neutral Analyst",
-                "Risk Judge": "Risk Judge",
-            },
-        )
-        workflow.add_conditional_edges(
-            "Neutral Analyst",
-            self.conditional_logic.should_continue_risk_analysis,
-            {
-                "Risky Analyst": "Risky Analyst",
-                "Risk Judge": "Risk Judge",
-            },
-        )
-
-        workflow.add_edge("Risk Judge", END)
 
         # Compile and return
         return workflow.compile()

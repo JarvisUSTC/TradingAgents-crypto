@@ -6,10 +6,16 @@ from tradingagents.agents.utils.agent_states import AgentState
 class ConditionalLogic:
     """Handles conditional logic for determining graph flow."""
 
-    def __init__(self, max_debate_rounds=1, max_risk_discuss_rounds=1):
+    def __init__(
+        self,
+        max_debate_rounds: int = 1,
+        max_risk_discuss_rounds: int = 1,
+        max_backtest_rounds: int = 3,
+    ):
         """Initialize with configuration parameters."""
         self.max_debate_rounds = max_debate_rounds
         self.max_risk_discuss_rounds = max_risk_discuss_rounds
+        self.max_backtest_rounds = max_backtest_rounds
 
     def should_continue_market(self, state: AgentState):
         """Determine if market analysis should continue."""
@@ -70,9 +76,17 @@ class ConditionalLogic:
         """
         Determine if backtesting and strategy refinement should continue.
 
-        If strategy_acceptable is True, proceed to Trader.
-        Otherwise, loop back to Strategy Designer for refinement.
+        If strategy_acceptable is True, or the maximum number of
+        backtest rounds has been reached, stop the graph (END).
+        Otherwise, loop back to Factor Researcher so that both factors
+        and strategy can be refined using the latest backtest results.
         """
+        # Track how many backtest iterations have been run
+        current_round = state.get("backtest_round", 0) + 1
+        state["backtest_round"] = current_round
+
         if state.get("strategy_acceptable"):
-            return "Trader"
-        return "Strategy Designer"
+            return "END"
+        if current_round >= self.max_backtest_rounds:
+            return "END"
+        return "Factor Researcher"

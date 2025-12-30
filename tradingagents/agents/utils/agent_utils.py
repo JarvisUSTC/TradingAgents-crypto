@@ -663,6 +663,10 @@ class Toolkit:
         url = f"{base_url}/backtesting/run-backtesting"
         try:
             config_dict = json.loads(controller_config_json)
+            if not config_dict.get("candles_connector", None):
+                config_dict["candles_connector"] = config_dict["connector_name"]
+            if not config_dict.get("candles_trading_pair", None):
+                config_dict["candles_trading_pair"] = config_dict["trading_pair"]
         except json.JSONDecodeError:
             raise ValueError(
                 "controller_config_json must be a valid JSON string representing the controller configuration."

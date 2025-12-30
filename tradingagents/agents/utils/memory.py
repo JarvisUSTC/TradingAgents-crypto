@@ -4,6 +4,8 @@ from openai import OpenAI
 
 
 class FinancialSituationMemory:
+    MAX_EMBEDDING_CHARS = 2048
+
     def __init__(self, name, config):
         if config["backend_url"] == "http://localhost:11434/v1":
             self.embedding = "nomic-embed-text"
@@ -14,26 +16,39 @@ class FinancialSituationMemory:
             api_key=config["api_key"]
         )
         self.chroma_client = chromadb.Client(Settings(allow_reset=True))
-        
+
         # Make collection name unique per session to avoid conflicts
         session_id = config.get('session_id', 'default')
         unique_name = f"{name}_{session_id}"
-        
+
         # Check if collection already exists, if so delete it and create new one
         try:
-            existing_collections = [col.name for col in self.chroma_client.list_collections()]
+            existing_collections = [
+                col.name for col in self.chroma_client.list_collections()]
             if unique_name in existing_collections:
                 self.chroma_client.delete_collection(name=unique_name)
         except Exception as e:
             # If there's any issue checking/deleting, just continue
             pass
-        
+
         # Create the collection (now guaranteed to be fresh and unique)
-        self.situation_collection = self.chroma_client.create_collection(name=unique_name)
+        self.situation_collection = self.chroma_client.create_collection(
+            name=unique_name)
 
     def get_embedding(self, text):
-        """Get OpenAI embedding for a text"""
-        
+        """Get OpenAI embedding for a text.
+
+        To avoid provider errors on very long inputs, truncate the
+        input text to MAX_EMBEDDING_CHARS characters before calling
+        the embeddings API.
+        """
+        if text is None:
+            text = ""
+        # Ensure we always work with a string
+        text = str(text)
+        if len(text) > self.MAX_EMBEDDING_CHARS:
+            text = text[: self.MAX_EMBEDDING_CHARS]
+
         response = self.client.embeddings.create(
             model=self.embedding, input=text
         )

@@ -71,6 +71,11 @@ The following JSON contains pre-computed quantitative factor values derived from
 
 {factor_values_json}
 
+If previous backtests have been run in this session, you may also see their results here:
+
+Backtest results (may be empty on first run):
+{backtest_results}
+
 Design a factor specification and interpret these factors together with the research reports.
 Return:
 - A clear factor specification describing which factors are used and how.
@@ -356,6 +361,7 @@ Return ONLY the JSON array, with no extra text.""",
                 "candles_data": candles_overview,
                 "order_book_data": order_book_overview,
                 "factor_values_json": factor_values_json,
+                "backtest_results": state.get("backtest_results", ""),
             }
         )
         content = result.content if hasattr(result, "content") else str(result)

@@ -790,7 +790,7 @@ def get_global_news_openai(curr_date):
         store=True,
     )
 
-    return response.output[1].content[0].text
+    return response.output[-1].content[0].text
 
 
 def get_fundamentals_openai(ticker, curr_date):
@@ -825,7 +825,7 @@ def get_fundamentals_openai(ticker, curr_date):
         store=True,
     )
 
-    return response.output[1].content[0].text
+    return response.output[-1].content[0].text
 
 
 # ===== CRYPTO TRADING FUNCTIONS =====

@@ -590,18 +590,32 @@
                             <div class="small text-muted">Research coordination</div>
                         </div>
                     </div>
-                    <div class="agent-status pending" data-agent="Trader">
+                    <div class="agent-status pending" data-agent="Factor Researcher">
                         <div class="status-icon pending"><i class="fas fa-circle"></i></div>
                         <div>
-                            <strong>Trader</strong>
-                            <div class="small text-muted">Trading strategy</div>
+                            <strong>Factor Researcher</strong>
+                            <div class="small text-muted">Quant factor research</div>
                         </div>
                     </div>
-                    <div class="agent-status pending" data-agent="Portfolio Manager">
+                    <div class="agent-status pending" data-agent="Strategy Designer">
                         <div class="status-icon pending"><i class="fas fa-circle"></i></div>
                         <div>
-                            <strong>Portfolio Manager</strong>
-                            <div class="small text-muted">Portfolio decisions</div>
+                            <strong>Strategy Designer</strong>
+                            <div class="small text-muted">Strategy configuration</div>
+                        </div>
+                    </div>
+                    <div class="agent-status pending" data-agent="Backtest Runner">
+                        <div class="status-icon pending"><i class="fas fa-circle"></i></div>
+                        <div>
+                            <strong>Backtest Runner</strong>
+                            <div class="small text-muted">Backtest execution</div>
+                        </div>
+                    </div>
+                    <div class="agent-status pending" data-agent="Strategy Evaluator">
+                        <div class="status-icon pending"><i class="fas fa-circle"></i></div>
+                        <div>
+                            <strong>Strategy Evaluator</strong>
+                            <div class="small text-muted">Backtest evaluation</div>
                         </div>
                     </div>
                 </div>
@@ -835,8 +849,10 @@
                 'news_report': 'News Analysis',
                 'fundamentals_report': 'Fundamentals Analysis',
                 'investment_plan': 'Research Team Decision',
-                'trader_investment_plan': 'Trading Plan',
-                'final_trade_decision': 'Portfolio Management Decision'
+                'factor_research': 'Quant Factor Research',
+                'strategy_design': 'Strategy Design',
+                'backtest_results': 'Backtest Results',
+                'strategy_evaluation': 'Strategy Evaluation'
             };
             
             sectionElement.innerHTML = `

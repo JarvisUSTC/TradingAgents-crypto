@@ -57,20 +57,26 @@ Summarize the key metrics and provide a concise evaluation of this strategy's pe
             trade_date,
         )
 
-        backtest_results = json.loads(raw_results)['results']
+        try:
+            parsed = json.loads(raw_results)
+            results_payload = parsed.get("results", parsed)
+        except Exception:
+            results_payload = raw_results
 
         chain = prompt | llm
         result = chain.invoke(
             {
                 "company_of_interest": state["company_of_interest"],
                 "trade_date": state["trade_date"],
-                "raw_results": str(backtest_results),
+                "raw_results": str(results_payload),
             }
         )
         content = result.content if hasattr(result, "content") else str(result)
 
         return {
-            "backtest_results": backtest_results,
+            # Store backtest_results as JSON string so that downstream
+            # evaluators and UIs can parse it consistently.
+            "backtest_results": json.dumps(results_payload),
             "selected_strategy_summary": content,
             "sender": "Backtest Runner",
             "messages": state["messages"] + [result],
