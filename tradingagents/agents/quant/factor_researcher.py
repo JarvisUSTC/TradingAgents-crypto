@@ -273,7 +273,15 @@ RESPONSE FORMAT:
                 start_ts,
                 end_ts,
             )
-            df = pd.DataFrame(json.loads(candles_raw))
+            try:
+                candles_data = json.loads(candles_raw)
+            except Exception:
+                # Surface the raw tool output so the caller can see the
+                # detailed error message from hummingbot-api.
+                raise RuntimeError(
+                    f"Failed to parse historical candles JSON. Raw response: {candles_raw}"
+                )
+            df = pd.DataFrame(candles_data)
 
             if not df.empty and "timestamp" in df.columns:
                 df = df.sort_values("timestamp")
@@ -298,12 +306,17 @@ RESPONSE FORMAT:
             }
 
         # --- 2. Context Preparation ---
-        context_str = (
-            "Market Report: "
-            + state.get("market_report", "N/A")
-            + "\n\nNews: "
-            + state.get("news_report", "N/A")
-        )
+        # Prefer the compressed research_summary to keep prompts small.
+        research_summary = state.get("research_summary", "") or ""
+        if research_summary:
+            context_str = f"Compressed research summary:\n{research_summary}"
+        else:
+            context_str = (
+                "Market Report: "
+                + state.get("market_report", "N/A")
+                + "\n\nNews: "
+                + state.get("news_report", "N/A")
+            )
 
         # --- 3. Factor Mining + Multi-Turn Improvement Loop (with feedback) ---
         # We run a short internal conversation with the LLM:
@@ -332,8 +345,11 @@ RESPONSE FORMAT:
         best_explanation = ""
         last_ai_msg: AIMessage | None = None
 
-        max_rounds = 5
-        for _ in range(max_rounds):
+        # One initial idea + a couple of refinement rounds using backtest feedback.
+        max_improve_rounds = 2
+        total_rounds = 1 + max_improve_rounds
+
+        for _ in range(total_rounds):
             ai_msg = llm.invoke(convo)
             last_ai_msg = ai_msg
             convo.append(ai_msg)

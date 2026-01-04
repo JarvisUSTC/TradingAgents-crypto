@@ -60,6 +60,10 @@ class AgentState(MessagesState):
         str, "Report from the News Researcher of current world affairs"
     ]
     fundamentals_report: Annotated[str, "Report from the Fundamentals Researcher"]
+    research_summary: Annotated[
+        str,
+        "Compressed summary of market, news, fundamentals, and sentiment reports for downstream quantitative agents.",
+    ]
 
     # researcher team discussion step
     investment_debate_state: Annotated[
@@ -104,3 +108,15 @@ class AgentState(MessagesState):
         RiskDebateState, "Current state of the debate on evaluating risk"
     ]
     final_trade_decision: Annotated[str, "Final decision made by the Risk Analysts"]
+    risk_control_plan: Annotated[
+        str,
+        "Structured risk control suggestions from the quantitative Risk Manager (markdown / text).",
+    ]
+    risk_decision: Annotated[
+        str,
+        "Final risk decision label from Risk Manager, e.g. ACCEPT/ADJUST/REJECT.",
+    ]
+    risk_adjustment_pass: Annotated[
+        bool,
+        "Whether a risk-driven strategy adjustment pass has already been performed.",
+    ]

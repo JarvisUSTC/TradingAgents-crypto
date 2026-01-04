@@ -541,7 +541,12 @@ class Toolkit:
             os.environ.get("HUMMINGBOT_API_PASSWORD", "admin"),
         )
         response = requests.post(url, json=payload, auth=auth, timeout=30)
-        response.raise_for_status()
+        if response.status_code != 200:
+            try:
+                error_detail = response.json().get("detail", response.text)
+                return f"Error {response.status_code}: {error_detail}"
+            except Exception:
+                return f"Error {response.status_code}: {response.text}"
         return response.text
 
     @staticmethod
@@ -583,7 +588,12 @@ class Toolkit:
             os.environ.get("HUMMINGBOT_API_PASSWORD", "admin"),
         )
         response = requests.post(url, json=payload, auth=auth, timeout=60)
-        response.raise_for_status()
+        if response.status_code != 200:
+            try:
+                error_detail = response.json().get("detail", response.text)
+                return f"Error {response.status_code}: {error_detail}"
+            except Exception:
+                return f"Error {response.status_code}: {response.text}"
         return response.text
 
     @staticmethod
@@ -609,7 +619,12 @@ class Toolkit:
             os.environ.get("HUMMINGBOT_API_PASSWORD", "admin"),
         )
         response = requests.post(url, json=payload, auth=auth, timeout=30)
-        response.raise_for_status()
+        if response.status_code != 200:
+            try:
+                error_detail = response.json().get("detail", response.text)
+                return f"Error {response.status_code}: {error_detail}"
+            except Exception:
+                return f"Error {response.status_code}: {response.text}"
         return response.text
 
     @staticmethod
@@ -635,7 +650,12 @@ class Toolkit:
             os.environ.get("HUMMINGBOT_API_PASSWORD", "admin"),
         )
         response = requests.get(url, auth=auth, timeout=30)
-        response.raise_for_status()
+        if response.status_code != 200:
+            try:
+                error_detail = response.json().get("detail", response.text)
+                return f"Error {response.status_code}: {error_detail}"
+            except Exception:
+                return f"Error {response.status_code}: {response.text}"
         return response.text
 
     @staticmethod
@@ -657,7 +677,12 @@ class Toolkit:
             os.environ.get("HUMMINGBOT_API_PASSWORD", "admin"),
         )
         response = requests.get(url, auth=auth, timeout=30)
-        response.raise_for_status()
+        if response.status_code != 200:
+            try:
+                error_detail = response.json().get("detail", response.text)
+                return f"Error {response.status_code}: {error_detail}"
+            except Exception:
+                return f"Error {response.status_code}: {response.text}"
         return response.text
 
     @staticmethod
@@ -674,7 +699,12 @@ class Toolkit:
             os.environ.get("HUMMINGBOT_API_PASSWORD", "admin"),
         )
         response = requests.get(url, auth=auth, timeout=30)
-        response.raise_for_status()
+        if response.status_code != 200:
+            try:
+                error_detail = response.json().get("detail", response.text)
+                return f"Error {response.status_code}: {error_detail}"
+            except Exception:
+                return f"Error {response.status_code}: {response.text}"
         return response.text
 
     @staticmethod
@@ -700,7 +730,12 @@ class Toolkit:
             os.environ.get("HUMMINGBOT_API_PASSWORD", "admin"),
         )
         response = requests.get(url, auth=auth, timeout=30)
-        response.raise_for_status()
+        if response.status_code != 200:
+            try:
+                error_detail = response.json().get("detail", response.text)
+                return f"Error {response.status_code}: {error_detail}"
+            except Exception:
+                return f"Error {response.status_code}: {response.text}"
         return response.text
 
     @staticmethod
@@ -738,7 +773,12 @@ class Toolkit:
             os.environ.get("HUMMINGBOT_API_PASSWORD", "admin"),
         )
         response = requests.post(url, json=payload, auth=auth, timeout=60)
-        response.raise_for_status()
+        if response.status_code != 200:
+            try:
+                error_detail = response.json().get("detail", response.text)
+                return f"Error {response.status_code}: {error_detail}"
+            except Exception:
+                return f"Error {response.status_code}: {response.text}"
         return response.text
 
     @staticmethod
@@ -760,7 +800,12 @@ class Toolkit:
             os.environ.get("HUMMINGBOT_API_PASSWORD", "admin"),
         )
         response = requests.get(url, auth=auth, timeout=30)
-        response.raise_for_status()
+        if response.status_code != 200:
+            try:
+                error_detail = response.json().get("detail", response.text)
+                return f"Error {response.status_code}: {error_detail}"
+            except Exception:
+                return f"Error {response.status_code}: {response.text}"
         return response.text
 
     @staticmethod
@@ -800,7 +845,12 @@ class Toolkit:
             os.environ.get("HUMMINGBOT_API_PASSWORD", "admin"),
         )
         response = requests.post(url, json=config_dict, auth=auth, timeout=60)
-        response.raise_for_status()
+        if response.status_code != 200:
+            try:
+                error_detail = response.json().get("detail", response.text)
+                return f"Error {response.status_code}: {error_detail}"
+            except Exception:
+                return f"Error {response.status_code}: {response.text}"
         return response.text
 
     @staticmethod
@@ -839,7 +889,12 @@ class Toolkit:
             os.environ.get("HUMMINGBOT_API_PASSWORD", "admin"),
         )
         response = requests.post(url, json=config_dict, auth=auth, timeout=60)
-        response.raise_for_status()
+        if response.status_code != 200:
+            try:
+                error_detail = response.json().get("detail", response.text)
+                return f"Error {response.status_code}: {error_detail}"
+            except Exception:
+                return f"Error {response.status_code}: {response.text}"
         return response.text
 
     @staticmethod
@@ -913,5 +968,10 @@ class Toolkit:
         response = requests.post(
             url, json=backtesting_payload, auth=auth, timeout=60
         )
-        response.raise_for_status()
+        if response.status_code != 200:
+            try:
+                error_detail = response.json().get("detail", response.text)
+                return f"Error {response.status_code}: {error_detail}"
+            except Exception:
+                return f"Error {response.status_code}: {response.text}"
         return response.text

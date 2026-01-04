@@ -40,6 +40,14 @@ Design principles:
   tweak parameters of an existing one unless explicitly instructed.
 - Encode risk management directly into the strategy (position sizing, leverage limits,
   stop loss / take profit logic, max drawdown parameters, etc.), consistent with any risk context.
+- If the input includes a prior risk manager decision or a 'Risk manager final decision and control plan',
+  treat this as a risk-adjustment pass: keep the core factor/strategy idea, but MODIFY the controller
+  config and (if necessary) controller code to implement those risk controls explicitly.
+- IMPORTANT ABOUT CONFIG INHERITANCE: If you choose to implement a new config class that inherits from
+  an existing Hummingbot config base class, you MUST NOT add any new configuration fields beyond what
+  the base class defines, because the base class schema forbids unknown fields. If you truly need new
+  configuration parameters, DO NOT use inheritance from that base class; instead, define an appropriate
+  config class that matches the fields you intend to use.
 - Make sure the config is consistent with the controller_type and controller_name, and is
   suitable for the backtest horizon used in this system (recent 30 days by default).
 
@@ -82,6 +90,14 @@ The JSON MUST be valid, with no comments or trailing commas."""
             risk_context_parts.append(
                 f"Risk debate judge decision:\n{risk_state.get('judge_decision')}"
             )
+        # Include any explicit risk control plan produced by the quantitative
+        # Risk Manager on a prior pass.
+        risk_control_plan = state.get("risk_control_plan", "")
+        if risk_control_plan:
+            risk_context_parts.append(
+                "Risk manager final decision and control plan:\n" + risk_control_plan
+            )
+
         risk_context = (
             "\n\n".join(risk_context_parts)
             if risk_context_parts
@@ -95,6 +111,7 @@ The JSON MUST be valid, with no comments or trailing commas."""
             content=(
                 f"You are designing a Hummingbot controller strategy for {company} on {trade_date}.\n\n"
                 f"Investment plan:\n{state.get('investment_plan', '')}\n\n"
+                f"Compressed research summary (for context):\n{state.get('research_summary', '')}\n\n"
                 f"Quantitative factors specification / hypotheses:\n{state.get('factors_spec', '')}\n\n"
                 f"Quantitative factor DEFINITIONS / code specs (JSON string):\n{state.get('factor_values', '')}\n\n"
                 f"Backtest results (may be empty on first run):\n{state.get('backtest_results', '')}\n\n"

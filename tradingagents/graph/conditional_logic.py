@@ -90,3 +90,20 @@ class ConditionalLogic:
         if current_round >= self.max_backtest_rounds:
             return "END"
         return "Factor Researcher"
+
+    def should_apply_risk_adjustment(self, state: AgentState) -> str:
+        """
+        Decide whether to send the flow back to Strategy Designer for a
+        risk-driven adjustment pass, or end the graph.
+
+        We only allow a single risk-adjustment pass. If `risk_adjustment_pass`
+        is already True, or the risk decision is not ADJUST, we return End.
+        """
+        # If we've already done a risk adjustment pass, do not loop again.
+        if state.get("risk_adjustment_pass"):
+            return "End"
+
+        decision = (state.get("risk_decision") or "").strip().upper()
+        if decision == "ADJUST":
+            return "Adjust"
+        return "End"

@@ -100,7 +100,7 @@ class GraphSetup:
             self.deep_thinking_llm, self.invest_judge_memory
         )
 
-        # Create quantitative research and strategy nodes
+        # Create quantitative research, strategy, summary, and risk nodes
         factor_researcher_node = create_factor_researcher(
             self.deep_thinking_llm, self.toolkit
         )
@@ -111,12 +111,13 @@ class GraphSetup:
             self.quick_thinking_llm, self.toolkit
         )
         strategy_evaluator_node = create_strategy_evaluator(
-            self.quick_thinking_llm)
-
-        # Create risk analysis nodes
-        # Note: Trader and risk management nodes are intentionally omitted
-        # in this configuration. The quantitative backtest loop terminates
-        # directly after Strategy Evaluator.
+            self.quick_thinking_llm
+        )
+        # Risk manager now acts as the final quantitative risk gate on the
+        # designed and backtested strategy.
+        risk_manager_node = create_risk_manager(
+            self.deep_thinking_llm, self.risk_manager_memory
+        )
 
         # Create workflow
         workflow = StateGraph(AgentState)
@@ -185,19 +186,35 @@ class GraphSetup:
                 "Research Manager": "Research Manager",
             },
         )
-        # Research manager leads into quantitative strategy loop before Trader
-        workflow.add_edge("Research Manager", "Factor Researcher")
+        # Research manager leads into a compressed research summary step before
+        # the quantitative strategy loop, to keep downstream context compact.
+        workflow.add_node("Research Summary", create_research_summary(self.quick_thinking_llm))
+        workflow.add_edge("Research Manager", "Research Summary")
+        workflow.add_edge("Research Summary", "Factor Researcher")
 
-        # Quantitative loop: factor -> strategy design -> backtest -> evaluator
+        # Quantitative loop: factor -> strategy design -> backtest -> evaluator -> risk manager
         workflow.add_edge("Factor Researcher", "Strategy Designer")
         workflow.add_edge("Strategy Designer", "Backtest Runner")
         workflow.add_edge("Backtest Runner", "Strategy Evaluator")
+        workflow.add_node("Risk Manager", risk_manager_node)
         workflow.add_conditional_edges(
             "Strategy Evaluator",
             self.conditional_logic.should_continue_backtesting,
             {
                 "Factor Researcher": "Factor Researcher",
-                "END": END,
+                # When the loop is complete, hand off to Risk Manager for
+                # final risk assessment instead of ending immediately.
+                "END": "Risk Manager",
+            },
+        )
+        # Risk Manager decides whether to request a risk-driven adjustment
+        # pass (send back to Strategy Designer) or to end the graph.
+        workflow.add_conditional_edges(
+            "Risk Manager",
+            self.conditional_logic.should_apply_risk_adjustment,
+            {
+                "Adjust": "Strategy Designer",
+                "End": END,
             },
         )
 
