@@ -1,7 +1,6 @@
-from typing import Dict, Any, List, Tuple
+from typing import Dict, Any, List
 import json
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
+from langchain_core.messages import HumanMessage, SystemMessage, AIMessage, ToolMessage
 
 from tradingagents.agents.utils.agent_states import AgentState
 
@@ -10,219 +9,271 @@ def create_strategy_designer(llm, toolkit):
     """
     Create a strategy designer node that:
     - Reads factor specification and values
-    - Calls hummingbot controller template/config endpoints
+    - Uses Hummingbot controller tools via a tool-enabled agent
+    - Prefers creating a NEW controller (code + config) in Hummingbot
     - Produces a concrete controller config JSON string for backtesting
     """
 
-    system = """You are a quantitative strategy designer for algorithmic trading.
-You design concrete strategy configurations for a hummingbot-based execution engine.
+    controller_tools = [
+        toolkit.hb_list_controllers,
+        toolkit.hb_list_controller_configs,
+        toolkit.hb_get_controller_template,
+        toolkit.hb_get_controller,
+        toolkit.hb_get_controller_config,
+        toolkit.hb_validate_controller_config,
+        toolkit.hb_create_or_update_controller,
+        toolkit.hb_create_or_update_controller_config,
+    ]
 
-You MUST:
-- First, choose an appropriate controller type and name based on the factors and investment plan.
-- Then, use the controller's configuration TEMPLATE from hummingbot-api as the base for the final config.
-- Only adjust parameter VALUES; do not invent new fields that are not in the template unless clearly optional.
-- When previous backtest results are available, use them to refine or adjust the strategy parameters to improve performance.
-- Produce a final JSON configuration string that hummingbot-api can accept for backtesting.
+    system = """You are a quantitative strategy designer for Hummingbot V2.
+You receive research outputs (investment plan, quantitative factors, and optional risk preferences)
+and must design a FULL Hummingbot controller strategy that can be saved and backtested.
 
-Final output structure (for the whole node):
-1) Brief natural language explanation of the chosen controller and parameters.
-2) A JSON configuration object on a separate line, starting with 'CONFIG_JSON:'.
-The JSON must be valid, compact, and self-contained."""
+You have access to CONTROLLER tools that let you:
+- Inspect existing controllers and configs
+- Create or update controller PYTHON code
+- Validate and save controller CONFIGS
 
-    # Step 2: design config using the selected template
-    config_prompt = ChatPromptTemplate.from_messages(
-        [
-            ("system", system),
-            (
-                "human",
-                """You are designing a strategy for {company_of_interest} on {trade_date}.
+Design principles:
+- By default, PREFER creating a NEW controller with a NEW controller_name that does not clash
+  with existing controllers. You may read existing controllers for inspiration, but do not just
+  tweak parameters of an existing one unless explicitly instructed.
+- Encode risk management directly into the strategy (position sizing, leverage limits,
+  stop loss / take profit logic, max drawdown parameters, etc.), consistent with any risk context.
+- Make sure the config is consistent with the controller_type and controller_name, and is
+  suitable for the backtest horizon used in this system (recent 30 days by default).
 
-Investment plan (human research team decision):
-{investment_plan}
+Expected tool usage (you may adapt as needed):
+1) Optionally call hb_list_controllers and hb_list_controller_configs to understand what exists.
+2) Propose a NEW controller_type and controller_name and generate full controller_code.
+3) Call hb_create_or_update_controller with the code so Hummingbot can load it.
+4) Design a full config object for this controller, then call hb_validate_controller_config.
+5) Call hb_create_or_update_controller_config to save the config.
 
-Quantitative factors specification:
-{factors_spec}
+When you are completely done (all necessary tools have been called), respond with exactly ONE line:
+STRATEGY_RESULT_JSON: { ... }
 
-Quantitative factor values and signals:
-{factor_values}
+The JSON object MUST have these keys:
+- "controller_type": string, one of ["directional_trading", "market_making", "generic"].
+- "controller_name": string, usually a NEW controller name you defined for this strategy.
+- "config_name": string, slug identifier for this specific strategy config (no spaces, e.g. "btc_bollinger_factors_v1").
+- "config": object, the full config for this strategy, including at least:
+    - controller_name
+    - controller_type
+    - connector_name
+    - trading_pair
+    - any other required fields for the controller to run
+- "explanation": brief natural-language summary of the strategy logic and key risk controls.
+You may optionally include:
+- "controller_code": string with the Python source code you created or updated.
 
-Backtest results and performance summary (may be empty on first run):
-{backtest_results}
-
-You have selected the following hummingbot controller:
-controller_type = {controller_type}
-controller_name = {controller_name}
-
-The configuration TEMPLATE for this controller from hummingbot-api is:
-{controller_template}
-
-Use this TEMPLATE as the basis for your design instead of inventing new schema.
-You may adjust parameter values, thresholds, and toggles, but should not remove required fields.
-
-Design ONE concrete strategy configuration suitable for backtesting.
-Explain your choice briefly, then output the final JSON config on a separate line starting with:
-CONFIG_JSON: <json>""",
-            ),
-        ]
-    )
+The JSON MUST be valid, with no comments or trailing commas."""
 
     def node(state: AgentState) -> Dict[str, Any]:
-        # Step 0: fetch available controllers from hummingbot-api as context
-        try:
-            # hb_list_controllers is a StructuredTool; use .func for direct call.
-            controller_index = toolkit.hb_list_controllers.func()
-        except Exception as e:
-            controller_index = f"Failed to fetch controller list from hummingbot-api: {e}"
+        # Build risk context if any is present
+        risk_context_parts: List[str] = []
+        final_trade_decision = state.get("final_trade_decision", "")
+        if final_trade_decision:
+            risk_context_parts.append(
+                f"Final trade decision from risk manager:\n{final_trade_decision}"
+            )
+        risk_state = state.get("risk_debate_state")
+        if isinstance(risk_state, dict) and risk_state.get("judge_decision"):
+            risk_context_parts.append(
+                f"Risk debate judge decision:\n{risk_state.get('judge_decision')}"
+            )
+        risk_context = (
+            "\n\n".join(risk_context_parts)
+            if risk_context_parts
+            else "No explicit risk context available in this run."
+        )
 
-        # Helper: parse available controller (type, name) pairs from index
-        available_pairs: List[Tuple[str, str]] = []
-        try:
-            parsed_index = json.loads(controller_index)
-            if isinstance(parsed_index, dict):
-                for ctype, controllers in parsed_index.items():
-                    if not isinstance(controllers, list):
-                        continue
-                    for entry in controllers:
-                        if isinstance(entry, str):
-                            available_pairs.append((ctype, entry))
-                        elif isinstance(entry, dict) and "name" in entry:
-                            name_val = entry.get("name")
-                            if isinstance(name_val, str):
-                                available_pairs.append((ctype, name_val))
-        except Exception:
-            parsed_index = None
+        company = state["company_of_interest"]
+        trade_date = state["trade_date"]
 
-        # Step 1: multi-turn selection of controller_type and controller_name.
-        # We keep a small conversational loop with explicit feedback when
-        # the chosen controller is not present in the controller index.
-        selection_messages = [
-            SystemMessage(
-                content=(
-                    "You are selecting the most suitable hummingbot controller "
-                    "(type and name) for a trading strategy based on factors "
-                    "and an investment plan.\n\n"
-                    "You MUST:\n"
-                    "- Choose controller_type and controller_name ONLY from the available list below.\n"
-                    "- NEVER invent new controller names.\n"
-                    "- Reply EXACTLY in this format:\n"
-                    "  CONTROLLER_TYPE: <type>\n"
-                    "  CONTROLLER_NAME: <name>"
-                )
-            ),
-            HumanMessage(
-                content=(
-                    f"You are designing a strategy for {state['company_of_interest']} "
-                    f"on {state['trade_date']}.\n\n"
-                    f"Investment plan:\n{state.get('investment_plan', '')}\n\n"
-                    f"Quantitative factors specification:\n{state.get('factors_spec', '')}\n\n"
-                    f"Quantitative factor values and signals:\n{state.get('factor_values', '')}\n\n"
-                    f"Backtest results (may be empty on first run):\n{state.get('backtest_results', '')}\n\n"
-                    "Available controllers from hummingbot-api:\n"
-                    f"{controller_index}\n\n"
-                    "Now choose ONE controller_type and ONE controller_name from the list above.\n"
-                    "Remember: do not invent new names."
-                )
-            ),
-        ]
+        human = HumanMessage(
+            content=(
+                f"You are designing a Hummingbot controller strategy for {company} on {trade_date}.\n\n"
+                f"Investment plan:\n{state.get('investment_plan', '')}\n\n"
+                f"Quantitative factors specification / hypotheses:\n{state.get('factors_spec', '')}\n\n"
+                f"Quantitative factor DEFINITIONS / code specs (JSON string):\n{state.get('factor_values', '')}\n\n"
+                f"Backtest results (may be empty on first run):\n{state.get('backtest_results', '')}\n\n"
+                f"Risk management context (if any):\n{risk_context}\n\n"
+                "You may assume the trading universe is crypto, and you can use symbols like BTC-USDT, ETH-USDT, etc., "
+                "consistent with the company_of_interest.\n\n"
+                "Use the available controller tools to create or update a NEW controller and its config, "
+                "then return STRATEGY_RESULT_JSON as specified in the system message."
+            )
+        )
+
+        messages: List[Any] = [SystemMessage(content=system), human]
+
+        tool_llm = llm.bind_tools(controller_tools)
+
+        last_ai: AIMessage | None = None
+        max_iterations = 8
+
+        for _ in range(max_iterations):
+            ai_msg = tool_llm.invoke(messages)
+            last_ai = ai_msg
+            messages.append(ai_msg)
+
+            tool_calls = getattr(ai_msg, "tool_calls", None) or []
+            if tool_calls:
+                for call in tool_calls:
+                    name = call.get("name")
+                    args = call.get("args") or {}
+                    if isinstance(args, str):
+                        try:
+                            args = json.loads(args)
+                        except Exception:
+                            args = {}
+                    tool_obj = None
+                    for t in controller_tools:
+                        if t.name == name:
+                            tool_obj = t
+                            break
+                    if tool_obj is None:
+                        result_text = f"Tool '{name}' is not available."
+                    else:
+                        try:
+                            result_text = tool_obj.func(**args)
+                        except Exception as exc:
+                            result_text = f"Error while executing tool '{name}': {exc}"
+                    messages.append(
+                        ToolMessage(
+                            content=str(result_text),
+                            tool_call_id=call.get("id", ""),
+                        )
+                    )
+                continue
+
+            content_text = (
+                ai_msg.content if hasattr(ai_msg, "content") else str(ai_msg)
+            )
+            if "STRATEGY_RESULT_JSON:" in content_text:
+                break
+            # No tools and no final JSON marker: stop to avoid infinite loop
+            break
+
+        if last_ai is None:
+            return {
+                "strategy_template": "Strategy designer did not produce any output.",
+                "strategy_config": "",
+                "sender": "Strategy Designer",
+                "messages": state["messages"],
+            }
+
+        final_content = (
+            last_ai.content if hasattr(last_ai, "content") else str(last_ai)
+        )
+        marker = "STRATEGY_RESULT_JSON:"
+        spec_json: Dict[str, Any] | None = None
+        if marker in final_content:
+            _, tail = final_content.split(marker, 1)
+            spec_str = tail.strip()
+            try:
+                spec_json = json.loads(spec_str)
+            except Exception:
+                spec_json = None
 
         controller_type = ""
         controller_name = ""
+        config_name = ""
+        config_obj: Dict[str, Any] = {}
+        controller_code: str | None = None
+        explanation = final_content
 
-        max_selection_attempts = 3
-        for attempt in range(max_selection_attempts):
-            select_result = llm.invoke(selection_messages)
-            selection_messages.append(
-                AIMessage(
-                    content=select_result.content
-                    if hasattr(select_result, "content")
-                    else str(select_result)
-                )
-            )
+        if isinstance(spec_json, dict):
+            controller_type = spec_json.get("controller_type", "") or ""
+            controller_name = spec_json.get("controller_name", "") or ""
+            config_name = spec_json.get("config_name", "") or ""
+            raw_config = spec_json.get("config", {})
+            if isinstance(raw_config, dict):
+                config_obj = raw_config
+            explanation = spec_json.get("explanation", explanation) or explanation
+            code_val = spec_json.get("controller_code")
+            if isinstance(code_val, str) and code_val.strip():
+                controller_code = code_val
 
-            # Parse controller_type / controller_name from the latest reply
-            select_content = (
-                select_result.content
-                if hasattr(select_result, "content")
-                else str(select_result)
-            )
-            c_type = ""
-            c_name = ""
-            for line in select_content.splitlines():
-                line_stripped = line.strip()
-                if line_stripped.upper().startswith("CONTROLLER_TYPE:"):
-                    c_type = line_stripped.split(":", 1)[1].strip()
-                if line_stripped.upper().startswith("CONTROLLER_NAME:"):
-                    c_name = line_stripped.split(":", 1)[1].strip()
-
-            # If we could not parse the index, accept the first parsed values.
-            if not available_pairs:
-                controller_type, controller_name = c_type, c_name
-                break
-
-            if (c_type, c_name) in available_pairs:
-                controller_type, controller_name = c_type, c_name
-                break
-
-            # Invalid selection: append feedback and ask again.
-            feedback = (
-                "Your previous selection was INVALID.\n"
-                f"controller_type='{c_type}' and controller_name='{c_name}' "
-                "do NOT exist in the available controller list.\n\n"
-                "Please carefully re-read the available controllers shown above "
-                "and answer again using ONLY a valid pair.\n"
-                "Remember to respond exactly in the required format."
-            )
-            selection_messages.append(HumanMessage(content=feedback))
-
-        # As a final safeguard, if still invalid and we know valid pairs,
-        # fall back to the first available combination.
-        if available_pairs and (controller_type, controller_name) not in available_pairs:
-            controller_type, controller_name = available_pairs[0]
-
-        # Step 2: fetch the specific controller template using the selected type/name
-        if controller_type and controller_name:
+        if not config_obj:
             try:
-                controller_template = toolkit.hb_get_controller_template.func(
-                    controller_type, controller_name
+                config_obj = json.loads(state.get("factor_values", "{}"))
+            except Exception:
+                config_obj = {}
+
+        if controller_type:
+            config_obj.setdefault("controller_type", controller_type)
+        if controller_name:
+            config_obj.setdefault("controller_name", controller_name)
+        if not config_name and controller_name:
+            config_name = f"{controller_name}_auto"
+        if config_name:
+            config_obj.setdefault("id", config_name)
+
+        config_json = json.dumps(config_obj)
+
+        validation_info = ""
+        upsert_info = ""
+        controller_upsert_info = ""
+
+        # Prefer to create or update controller code first if provided
+        if controller_code and controller_type and controller_name:
+            try:
+                controller_upsert_info = toolkit.hb_create_or_update_controller.func(
+                    controller_type,
+                    controller_name,
+                    controller_code,
                 )
-            except Exception as e:
-                controller_template = (
-                    f"Failed to fetch controller template for "
-                    f"type={controller_type}, name={controller_name}: {e}"
+            except Exception as exc:
+                controller_upsert_info = (
+                    f"Failed to create/update controller code via hummingbot-api: {exc}"
                 )
-        else:
-            controller_template = (
-                "Controller type/name could not be parsed. Use defaults inferred "
-                "from the available configs above."
+
+        if controller_type and controller_name and config_json:
+            try:
+                validation_info = toolkit.hb_validate_controller_config.func(
+                    controller_type, controller_name, config_json
+                )
+            except Exception as exc:
+                validation_info = f"Validation failed or unavailable: {exc}"
+
+        if config_name and config_json:
+            try:
+                upsert_info = toolkit.hb_create_or_update_controller_config.func(
+                    config_name, config_json
+                )
+            except Exception as exc:
+                upsert_info = (
+                    f"Failed to create/update controller config via hummingbot-api: {exc}"
+                )
+
+        technical_lines: List[str] = []
+        technical_lines.append(
+            f"Strategy controller: type={controller_type}, name={controller_name}, config_name={config_name}"
+        )
+        if controller_upsert_info:
+            technical_lines.append(
+                f"Controller code upsert result: {controller_upsert_info}"
+            )
+        if validation_info:
+            technical_lines.append(f"Config validation result: {validation_info}")
+        if upsert_info:
+            technical_lines.append(f"Config upsert result: {upsert_info}")
+
+        technical_summary = ""
+        if technical_lines:
+            technical_summary = "\n\n[HUMMINGBOT_API_ACTIONS]\n" + "\n".join(
+                technical_lines
             )
 
-        # Step 3: design final config using the template
-        config_chain = config_prompt | llm
-        result = config_chain.invoke(
-            {
-                "company_of_interest": state["company_of_interest"],
-                "trade_date": state["trade_date"],
-                "investment_plan": state.get("investment_plan", ""),
-                "factors_spec": state.get("factors_spec", ""),
-                "factor_values": state.get("factor_values", ""),
-                "backtest_results": state.get("backtest_results", ""),
-                "controller_type": controller_type or "UNKNOWN",
-                "controller_name": controller_name or "UNKNOWN",
-                "controller_template": controller_template,
-            }
-        )
-        content = result.content if hasattr(result, "content") else str(result)
-        config_json = ""
-        marker = "CONFIG_JSON:"
-        if marker in content:
-            _, tail = content.split(marker, 1)
-            config_json = tail.strip()
+        narrative = explanation + technical_summary
 
         return {
-            "strategy_template": content,
-            "strategy_config": config_json or content,
+            "strategy_template": narrative,
+            "strategy_config": config_json or narrative,
             "sender": "Strategy Designer",
-            "messages": state["messages"] + [result],
+            "messages": state["messages"] + [last_ai],
         }
 
     return node

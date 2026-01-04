@@ -519,8 +519,9 @@ class Toolkit:
     def hb_get_candles(
         trading_pair: Annotated[str, "Trading pair, e.g. BTC-USDT"],
         interval: Annotated[str, "Candle interval such as 1m, 5m, 1h, 1d"],
-        max_records: Annotated[int,
-                               "Maximum number of records to request"] = 500,
+        max_records: Annotated[
+            int, "Maximum number of records to request"
+        ] = 500,
     ) -> str:
         """
         Retrieve recent candle data from hummingbot-api for a given trading pair and interval.
@@ -540,6 +541,48 @@ class Toolkit:
             os.environ.get("HUMMINGBOT_API_PASSWORD", "admin"),
         )
         response = requests.post(url, json=payload, auth=auth, timeout=30)
+        response.raise_for_status()
+        return response.text
+
+    @staticmethod
+    @tool
+    def hb_get_historical_candles(
+        trading_pair: Annotated[str, "Trading pair, e.g. BTC-USDT"],
+        interval: Annotated[str, "Candle interval such as 1m, 5m, 1h, 1d"],
+        start_time: Annotated[
+            int,
+            "Start of the lookback window as a Unix timestamp (seconds since epoch).",
+        ],
+        end_time: Annotated[
+            int,
+            "End of the lookback window as a Unix timestamp (seconds since epoch).",
+        ],
+        connector_name: Annotated[
+            str,
+            "Market data connector name, e.g. okx, binance_perpetual",
+        ] = "okx",
+    ) -> str:
+        """
+        Retrieve strictly historical candle data for a given trading pair and interval,
+        over an explicit time window [start_time, end_time].
+
+        This wraps POST /market-data/historical-candles and should be used whenever
+        we must avoid look-ahead bias relative to a given trade_date.
+        """
+        base_url = "http://hummingbot-api:8000"
+        url = f"{base_url}/market-data/historical-candles"
+        payload = {
+            "connector_name": connector_name,
+            "trading_pair": trading_pair,
+            "interval": interval,
+            "start_time": start_time,
+            "end_time": end_time,
+        }
+        auth = (
+            os.environ.get("HUMMINGBOT_API_USERNAME", "admin"),
+            os.environ.get("HUMMINGBOT_API_PASSWORD", "admin"),
+        )
+        response = requests.post(url, json=payload, auth=auth, timeout=60)
         response.raise_for_status()
         return response.text
 
@@ -572,8 +615,14 @@ class Toolkit:
     @staticmethod
     @tool
     def hb_get_controller_template(
-        controller_type: Annotated[str, "Controller type/category, e.g. spot, perpetual"],
-        controller_name: Annotated[str, "Controller name, e.g. avellaneda_market_making"],
+        controller_type: Annotated[
+            str,
+            "Controller type/category, e.g. directional_trading, market_making, generic",
+        ],
+        controller_name: Annotated[
+            str,
+            "Controller name, e.g. bollinger_v1, pmm_simple",
+        ],
     ) -> str:
         """
         Retrieve the configuration template (schema + default values) for a given controller
@@ -625,6 +674,171 @@ class Toolkit:
             os.environ.get("HUMMINGBOT_API_PASSWORD", "admin"),
         )
         response = requests.get(url, auth=auth, timeout=30)
+        response.raise_for_status()
+        return response.text
+
+    @staticmethod
+    @tool
+    def hb_get_controller(
+        controller_type: Annotated[
+            str,
+            "Controller type/category, e.g. directional_trading, market_making, generic",
+        ],
+        controller_name: Annotated[
+            str,
+            "Controller name, e.g. bollinger_v1, pmm_simple",
+        ],
+    ) -> str:
+        """
+        Retrieve the Python source code for a given controller from hummingbot-api.
+        This corresponds to GET /controllers/{controller_type}/{controller_name}.
+        """
+        base_url = "http://hummingbot-api:8000"
+        url = f"{base_url}/controllers/{controller_type}/{controller_name}"
+        auth = (
+            os.environ.get("HUMMINGBOT_API_USERNAME", "admin"),
+            os.environ.get("HUMMINGBOT_API_PASSWORD", "admin"),
+        )
+        response = requests.get(url, auth=auth, timeout=30)
+        response.raise_for_status()
+        return response.text
+
+    @staticmethod
+    @tool
+    def hb_create_or_update_controller(
+        controller_type: Annotated[
+            str,
+            "Controller type/category, e.g. directional_trading, market_making, generic",
+        ],
+        controller_name: Annotated[
+            str,
+            "Controller name to create or update, e.g. custom_factor_strategy_v1",
+        ],
+        controller_code: Annotated[
+            str,
+            "Full Python source code for the controller file, including config class and controller class.",
+        ],
+    ) -> str:
+        """
+        Create or update a controller's Python source file via hummingbot-api.
+
+        This wraps POST /controllers/{controller_type}/{controller_name} and is
+        conceptually equivalent to the `modify_controllers(... target='controller')`
+        operation provided by the hummingbot-mcp server.
+        """
+        base_url = "http://hummingbot-api:8000"
+        url = f"{base_url}/controllers/{controller_type}/{controller_name}"
+        payload = {
+            "content": controller_code,
+            # The API will validate this as a ControllerType enum value.
+            "type": controller_type,
+        }
+        auth = (
+            os.environ.get("HUMMINGBOT_API_USERNAME", "admin"),
+            os.environ.get("HUMMINGBOT_API_PASSWORD", "admin"),
+        )
+        response = requests.post(url, json=payload, auth=auth, timeout=60)
+        response.raise_for_status()
+        return response.text
+
+    @staticmethod
+    @tool
+    def hb_get_controller_config(
+        config_name: Annotated[
+            str,
+            "Name of the controller configuration (without .yml extension).",
+        ],
+    ) -> str:
+        """
+        Retrieve a controller configuration by name from hummingbot-api.
+        This wraps GET /controllers/configs/{config_name}.
+        """
+        base_url = "http://hummingbot-api:8000"
+        url = f"{base_url}/controllers/configs/{config_name}"
+        auth = (
+            os.environ.get("HUMMINGBOT_API_USERNAME", "admin"),
+            os.environ.get("HUMMINGBOT_API_PASSWORD", "admin"),
+        )
+        response = requests.get(url, auth=auth, timeout=30)
+        response.raise_for_status()
+        return response.text
+
+    @staticmethod
+    @tool
+    def hb_create_or_update_controller_config(
+        config_name: Annotated[
+            str,
+            "Name of the controller configuration (without .yml extension).",
+        ],
+        config_json: Annotated[
+            str,
+            "Full controller configuration as a JSON string. Must include controller_name and controller_type.",
+        ],
+    ) -> str:
+        """
+        Create or update a controller configuration via hummingbot-api.
+
+        This wraps POST /controllers/configs/{config_name} and mirrors the
+        config upsert behavior of the `modify_controllers(... target='config')`
+        tool in the hummingbot-mcp server.
+        """
+        try:
+            config_dict = json.loads(config_json)
+        except json.JSONDecodeError as exc:
+            raise ValueError(
+                f"config_json must be a valid JSON object; got parse error: {exc}"
+            )
+
+        # Ensure the config has a stable identifier field for easier discovery.
+        if "id" not in config_dict:
+            config_dict["id"] = config_name
+
+        base_url = "http://hummingbot-api:8000"
+        url = f"{base_url}/controllers/configs/{config_name}"
+        auth = (
+            os.environ.get("HUMMINGBOT_API_USERNAME", "admin"),
+            os.environ.get("HUMMINGBOT_API_PASSWORD", "admin"),
+        )
+        response = requests.post(url, json=config_dict, auth=auth, timeout=60)
+        response.raise_for_status()
+        return response.text
+
+    @staticmethod
+    @tool
+    def hb_validate_controller_config(
+        controller_type: Annotated[
+            str,
+            "Controller type/category, e.g. directional_trading, market_making, generic",
+        ],
+        controller_name: Annotated[
+            str,
+            "Controller name, e.g. bollinger_v1, pmm_simple",
+        ],
+        config_json: Annotated[
+            str,
+            "Full controller configuration as a JSON string.",
+        ],
+    ) -> str:
+        """
+        Validate a controller configuration against its Pydantic config class
+        using hummingbot-api.
+
+        This wraps POST /controllers/{controller_type}/{controller_name}/config/validate.
+        """
+        try:
+            config_dict = json.loads(config_json)
+        except json.JSONDecodeError as exc:
+            raise ValueError(
+                f"config_json must be a valid JSON object; got parse error: {exc}"
+            )
+
+        base_url = "http://hummingbot-api:8000"
+        url = f"{base_url}/controllers/{controller_type}/{controller_name}/config/validate"
+        auth = (
+            os.environ.get("HUMMINGBOT_API_USERNAME", "admin"),
+            os.environ.get("HUMMINGBOT_API_PASSWORD", "admin"),
+        )
+        response = requests.post(url, json=config_dict, auth=auth, timeout=60)
         response.raise_for_status()
         return response.text
 

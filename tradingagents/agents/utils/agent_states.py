@@ -70,11 +70,11 @@ class AgentState(MessagesState):
     # quantitative research and strategy step
     factors_spec: Annotated[
         str,
-        "Specification of quantitative factors, signals, and their configurations used for strategy design",
+        "Natural-language specification or hypothesis description of quantitative factors and signals used for strategy design",
     ]
     factor_values: Annotated[
         str,
-        "Computed factor values or summaries derived from market data and order book information",
+        "JSON string describing factor DEFINITIONS / code (e.g. formulas, code snippets, or DSL specs) that downstream agents can embed into controllers; not raw time-series values.",
     ]
     strategy_template: Annotated[
         str,
