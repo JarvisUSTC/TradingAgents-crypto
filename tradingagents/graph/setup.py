@@ -53,7 +53,8 @@ class GraphSetup:
                 - "fundamentals": Fundamentals analyst
         """
         if len(selected_analysts) == 0:
-            raise ValueError("Trading Agents Graph Setup Error: no analysts selected!")
+            raise ValueError(
+                "Trading Agents Graph Setup Error: no analysts selected!")
 
         # Create analyst nodes
         analyst_nodes = {}
@@ -101,15 +102,16 @@ class GraphSetup:
 
         # Create quantitative research and strategy nodes
         factor_researcher_node = create_factor_researcher(
-            self.quick_thinking_llm, self.toolkit
+            self.deep_thinking_llm, self.toolkit
         )
         strategy_designer_node = create_strategy_designer(
-            self.quick_thinking_llm, self.toolkit
+            self.deep_thinking_llm, self.toolkit
         )
         backtest_runner_node = create_backtest_runner(
             self.quick_thinking_llm, self.toolkit
         )
-        strategy_evaluator_node = create_strategy_evaluator(self.quick_thinking_llm)
+        strategy_evaluator_node = create_strategy_evaluator(
+            self.quick_thinking_llm)
 
         # Create risk analysis nodes
         # Note: Trader and risk management nodes are intentionally omitted
@@ -125,7 +127,8 @@ class GraphSetup:
             workflow.add_node(
                 f"Msg Clear {analyst_type.capitalize()}", delete_nodes[analyst_type]
             )
-            workflow.add_node(f"tools_{analyst_type}", tool_nodes[analyst_type])
+            workflow.add_node(f"tools_{analyst_type}",
+                              tool_nodes[analyst_type])
 
         # Add other nodes
         workflow.add_node("Bull Researcher", bull_researcher_node)
@@ -152,7 +155,8 @@ class GraphSetup:
             # Add conditional edges for current analyst
             workflow.add_conditional_edges(
                 current_analyst,
-                getattr(self.conditional_logic, f"should_continue_{analyst_type}"),
+                getattr(self.conditional_logic,
+                        f"should_continue_{analyst_type}"),
                 [current_tools, current_clear],
             )
             workflow.add_edge(current_tools, current_analyst)
