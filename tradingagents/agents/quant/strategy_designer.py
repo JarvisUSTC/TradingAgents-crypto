@@ -197,6 +197,8 @@ The JSON MUST be valid, with no comments or trailing commas."""
         controller_type = ""
         controller_name = ""
         config_name = ""
+        # This holds the final controller CONFIG object that will be serialized
+        # to strategy_config. It should always be a valid JSON object or empty.
         config_obj: Dict[str, Any] = {}
         controller_code: str | None = None
         explanation = final_content
@@ -213,11 +215,16 @@ The JSON MUST be valid, with no comments or trailing commas."""
             if isinstance(code_val, str) and code_val.strip():
                 controller_code = code_val
 
+        # If the assistant failed to provide a config in STRATEGY_RESULT_JSON,
+        # fall back to the PREVIOUS strategy_config (if any) instead of
+        # incorrectly reusing factor_values as a config.
         if not config_obj:
-            try:
-                config_obj = json.loads(state.get("factor_values", "{}"))
-            except Exception:
-                config_obj = {}
+            previous_config_json = state.get("strategy_config", "")
+            if previous_config_json:
+                try:
+                    config_obj = json.loads(previous_config_json)
+                except Exception:
+                    config_obj = {}
 
         if controller_type:
             config_obj.setdefault("controller_type", controller_type)
@@ -225,10 +232,12 @@ The JSON MUST be valid, with no comments or trailing commas."""
             config_obj.setdefault("controller_name", controller_name)
         if not config_name and controller_name:
             config_name = f"{controller_name}_auto"
-        if config_name:
+        if config_name and config_obj:
             config_obj.setdefault("id", config_name)
 
-        config_json = json.dumps(config_obj)
+        # Only serialize a JSON config if we actually have a config object.
+        # Otherwise keep it empty so downstream backtest logic can skip cleanly.
+        config_json = json.dumps(config_obj) if config_obj else ""
 
         validation_info = ""
         upsert_info = ""
@@ -288,7 +297,7 @@ The JSON MUST be valid, with no comments or trailing commas."""
 
         return {
             "strategy_template": narrative,
-            "strategy_config": config_json or narrative,
+            "strategy_config": config_json,
             "sender": "Strategy Designer",
             "messages": state["messages"] + [last_ai],
         }
